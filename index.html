@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Фитнес‑тренер: приседания</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { margin: 0; font-family: system-ui, Arial, sans-serif; display: grid; gap: 12px; padding: 12px;}
+    .wrap { position: relative; max-width: 900px; margin: 0 auto; }
+    video, canvas { width: 100%; height: auto; border-radius: 12px; background: #111; }
+    .hud { display:flex; gap: 8px; align-items:center; flex-wrap: wrap; justify-content: space-between;}
+    .left, .right { display:flex; gap:8px; align-items:center;}
+    .badge { padding:6px 10px; border-radius: 8px; background:#0b5; color:#fff; font-weight:600;}
+    button, select { padding:8px 10px; border-radius:8px; border:1px solid #888; background:transparent; color:inherit; }
+    .status { font-weight:600; }
+    .hint { opacity:.8; font-size: 0.95rem;}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="hud">
+      <div class="left">
+        <span class="badge">Счёт: <span id="count">0</span></span>
+        <span class="status" id="status">Готов</span>
+      </div>
+      <div class="right">
+        <select id="exercise">
+          <option value="squat">Приседания</option>
+          <!-- Можно добавить позже: pushup, jumping_jack -->
+        </select>
+        <button id="startBtn">Старт</button>
+        <button id="switchBtn">Сменить камеру</button>
+      </div>
+    </div>
+
+    <div class="wrap">
+      <canvas id="canvas"></canvas>
+      <video id="video" playsinline muted></video>
+    </div>
+
+    <p class="hint">
+      Советы: встань так, чтобы в кадре были полностью бёдра и колени. Освещение — яркое и равномерное.
+    </p>
+  </div>
+
+  <!-- TFJS + Pose Detection -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core@4.18.0/dist/tf-core.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl@4.18.0/dist/tf-backend-webgl.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter@4.18.0/dist/tf-converter.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@3.6.0/dist/pose-detection.min.js"></script>
+
+  <script>
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const countEl = document.getElementById('count');
+    const statusEl = document.getElementById('status');
+    const startBtn = document.getElementById('startBtn');
+    const switchBtn = document.getElementById('switchBtn');
+    const exerciseSel = document.getElementById('exercise');
+
+    let detector, stream;
+    let running = false;
+    let facingMode = 'user'; // user | environment
+    let count = 0;
+    let state = 'up'; // 'up' -> 'down' -> 'up' = +1
+    const thresholds = { down: 100, up: 160 };
+    const kpIndex = { // COCO indexing for MoveNet
+      left_hip: 11, right_hip: 12, left_knee: 13, right_knee: 14, left_ankle: 15, right_ankle: 16
+    };
+
+    function beep() {
+      const ac = new (window.AudioContext || window.webkitAudioContext)();
+      const o = ac.createOscillator(), g = ac.createGain();
+      o.connect(g); g.connect(ac.destination);
+      o.frequency.value = 880; g.gain.setValueAtTime(0.001, ac.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.1, ac.currentTime + 0.01);
+      o.start();
+      o.stop(ac.currentTime + 0.1);
+    }
+
+    async function initCamera() {
+      if (stream) stream.getTracks().forEach(t => t.stop());
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode,
+          width: { ideal: 1280 }, height: { ideal: 720 },
+          frameRate: { ideal: 30 }
+        },
+        audio: false
+      });
+      video.srcObject = stream;
+      await video.play();
+
+      // sync canvas to video size
+      await new Promise(r => video.onloadedmetadata ? (video.onloadedmetadata = r) : setTimeout(r, 100));
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+    }
+
+    function angle(a, b, c) {
+      // a,b,c: {x,y} (pixels)
+      const ab = { x: a.x - b.x, y: a.y - b.y };
+      const cb = { x: c.x - b.x, y: c.y - b.y };
+      const dot = ab.x * cb.x + ab.y * cb.y;
+      const abm = Math.hypot(ab.x, ab.y);
+      const cbm = Math.hypot(cb.x, cb.y);
+      const cos = Math.min(Math.max(dot / (abm * cbm + 1e-6), -1), 1);
+      return Math.acos(cos) * 180 / Math.PI;
+    }
+
+    function getKP(pose, name) {
+      // try by name, then by index (for safety across models)
+      const byName = pose.keypoints.find(k => k.name === name);
+      if (byName) return byName;
+      const idx = kpIndex[name];
+      return idx != null ? pose.keypoints[idx] : null;
+    }
+
+    function drawKeypointsAndSkeleton(pose, mirrored) {
+      ctx.save();
+      if (mirrored) { ctx.translate(canvas.width, 0); ctx.scale(-1, 1); }
+      // draw video
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+      // draw keypoints
+      const kps = pose.keypoints.filter(k => (k.score ?? 0) > 0.3);
+      ctx.fillStyle = '#00e676';
+      for (const k of kps) {
+        ctx.beginPath();
+        ctx.arc(k.x, k.y, 4, 0, 2 * Math.PI);
+        ctx.fill();
+      }
+      // simple skeleton lines (hips-knees-ankles)
+      const lines = [
+        ['left_hip','left_knee'], ['left_knee','left_ankle'],
+        ['right_hip','right_knee'], ['right_knee','right_ankle']
+      ];
+      ctx.strokeStyle = '#00b0ff'; ctx.lineWidth = 3;
+      for (const [a,b] of lines) {
+        const ka = getKP(pose,a), kb = getKP(pose,b);
+        if (ka && kb && (ka.score??0)>0.3 && (kb.score??0)>0.3) {
+          ctx.beginPath(); ctx.moveTo(ka.x,ka.y); ctx.lineTo(kb.x,kb.y); ctx.stroke();
+        }
+      }
+      ctx.restore();
+    }
+
+    function chooseSide(pose) {
+      const lk = getKP(pose,'left_knee'), rk = getKP(pose,'right_knee');
+      const ls = lk?.score ?? 0, rs = rk?.score ?? 0;
+      return rs >= ls ? 'right' : 'left';
+    }
+
+    function squatCounter(pose, mirrored) {
+      // pick side with better visibility
+      const side = chooseSide(pose);
+      const hip = getKP(pose, side + '_hip');
+      const knee = getKP(pose, side + '_knee');
+      const ankle = getKP(pose, side + '_ankle');
+      if (!hip || !knee || !ankle || (hip.score??0)<0.2 || (knee.score??0)<0.2 || (ankle.score??0)<0.2) {
+        statusEl.textContent = 'Нужно видеть бёдра/колени';
+        return;
+      }
+      const ang = angle({x:hip.x,y:hip.y},{x:knee.x,y:knee.y},{x:ankle.x,y:ankle.y});
+      // form hint
+      statusEl.textContent = `Угол колена: ${ang.toFixed(0)}° (${state})`;
+      // state machine
+      if (ang < thresholds.down && state === 'up') {
+        state = 'down';
+      } else if (ang > thresholds.up && state === 'down') {
+        state = 'up';
+        count++;
+        countEl.textContent = count;
+        beep();
+      }
+      // overlay angle text near knee
+      ctx.save();
+      if (mirrored) { ctx.translate(canvas.width, 0); ctx.scale(-1, 1); }
+      ctx.fillStyle = '#ffeb3b';
+      ctx.font = '16px system-ui, Arial';
+      ctx.fillText(`${ang.toFixed(0)}°`, knee.x + 8, knee.y - 8);
+      ctx.restore();
+    }
+
+    async function loop() {
+      if (!running) return;
+      const mirrored = (facingMode === 'user');
+      // estimate pose
+      const poses = await detector.estimatePoses(video, { flipHorizontal: mirrored });
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      if (poses && poses[0]) {
+        const pose = poses[0];
+        drawKeypointsAndSkeleton(pose, mirrored);
+        if (exerciseSel.value === 'squat') squatCounter(pose, mirrored);
+      } else {
+        // draw only video
+        ctx.save();
+        if (mirrored) { ctx.translate(canvas.width, 0); ctx.scale(-1, 1); }
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        ctx.restore();
+        statusEl.textContent = 'Не вижу человека';
+      }
+      requestAnimationFrame(loop);
+    }
+
+    async function initDetector() {
+      await tf.ready();
+      await tf.setBackend('webgl');
+      detector = await poseDetection.createDetector(
+        poseDetection.SupportedModels.MoveNet,
+        {
+          modelType: poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING,
+          enableSmoothing: true
+        }
+      );
+    }
+
+    startBtn.addEventListener('click', async () => {
+      if (running) { // stop
+        running = false;
+        startBtn.textContent = 'Старт';
+        statusEl.textContent = 'Пауза';
+        return;
+      }
+      statusEl.textContent = 'Загрузка модели...';
+      if (!detector) await initDetector();
+      await initCamera();
+      count = 0; countEl.textContent = count; state = 'up';
+      running = true;
+      startBtn.textContent = 'Стоп';
+      statusEl.textContent = 'Готов';
+      loop();
+    });
+
+    switchBtn.addEventListener('click', async () => {
+      facingMode = (facingMode === 'user') ? 'environment' : 'user';
+      if (running) await initCamera();
+    });
+
+    // permission check
+    if (!navigator.mediaDevices?.getUserMedia) {
+      alert('Ваш браузер не поддерживает камеру (getUserMedia). Откройте в современном Chrome/Safari/Edge.');
+    }
+  </script>
+</body>
+</html>
