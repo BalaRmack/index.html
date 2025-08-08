@@ -27,7 +27,7 @@
       <div class="right">
         <select id="exercise">
           <option value="squat">Приседания</option>
-          <!-- Можно добавить позже: pushup, jumping_jack -->
+          <!-- Позже можно добавить другие упражнения -->
         </select>
         <button id="startBtn">Старт</button>
         <button id="switchBtn">Сменить камеру</button>
@@ -44,11 +44,9 @@
     </p>
   </div>
 
-  <!-- TFJS + Pose Detection -->
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core@4.18.0/dist/tf-core.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl@4.18.0/dist/tf-backend-webgl.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter@4.18.0/dist/tf-converter.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@3.6.0/dist/pose-detection.min.js"></script>
+  <!-- Библиотеки: tfjs и модель позы (UMD, создают глобальные tf и poseDetection) -->
+  <script src="https://unpkg.com/@tensorflow/tfjs@4.18.0/dist/tf.min.js"></script>
+  <script src="https://unpkg.com/@tensorflow-models/pose-detection@3.7.1/dist/pose-detection.min.js"></script>
 
   <script>
     const video = document.getElementById('video');
@@ -71,13 +69,15 @@
     };
 
     function beep() {
-      const ac = new (window.AudioContext || window.webkitAudioContext)();
-      const o = ac.createOscillator(), g = ac.createGain();
-      o.connect(g); g.connect(ac.destination);
-      o.frequency.value = 880; g.gain.setValueAtTime(0.001, ac.currentTime);
-      g.gain.exponentialRampToValueAtTime(0.1, ac.currentTime + 0.01);
-      o.start();
-      o.stop(ac.currentTime + 0.1);
+      try {
+        const ac = new (window.AudioContext || window.webkitAudioContext)();
+        const o = ac.createOscillator(), g = ac.createGain();
+        o.connect(g); g.connect(ac.destination);
+        o.frequency.value = 880; g.gain.setValueAtTime(0.001, ac.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.1, ac.currentTime + 0.01);
+        o.start();
+        o.stop(ac.currentTime + 0.12);
+      } catch(_) {}
     }
 
     async function initCamera() {
@@ -93,14 +93,16 @@
       video.srcObject = stream;
       await video.play();
 
-      // sync canvas to video size
-      await new Promise(r => video.onloadedmetadata ? (video.onloadedmetadata = r) : setTimeout(r, 100));
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
+      await new Promise(resolve => {
+        if (video.readyState >= 1) resolve();
+        else video.onloadedmetadata = resolve;
+      });
+      canvas.width = video.videoWidth || 1280;
+      canvas.height = video.videoHeight || 720;
     }
 
     function angle(a, b, c) {
-      // a,b,c: {x,y} (pixels)
+      // a,b,c: {x,y}
       const ab = { x: a.x - b.x, y: a.y - b.y };
       const cb = { x: c.x - b.x, y: c.y - b.y };
       const dot = ab.x * cb.x + ab.y * cb.y;
@@ -111,7 +113,6 @@
     }
 
     function getKP(pose, name) {
-      // try by name, then by index (for safety across models)
       const byName = pose.keypoints.find(k => k.name === name);
       if (byName) return byName;
       const idx = kpIndex[name];
@@ -121,18 +122,18 @@
     function drawKeypointsAndSkeleton(pose, mirrored) {
       ctx.save();
       if (mirrored) { ctx.translate(canvas.width, 0); ctx.scale(-1, 1); }
-      // draw video
+      // видео
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-      // draw keypoints
+      // точки
       const kps = pose.keypoints.filter(k => (k.score ?? 0) > 0.3);
       ctx.fillStyle = '#00e676';
       for (const k of kps) {
         ctx.beginPath();
-        ctx.arc(k.x, k.y, 4, 0, 2 * Math.PI);
+        ctx.arc(k.x, k.y, 4, 0, Math.PI * 2);
         ctx.fill();
       }
-      // simple skeleton lines (hips-knees-ankles)
+      // простые линии: бедро-колено-щиколотка
       const lines = [
         ['left_hip','left_knee'], ['left_knee','left_ankle'],
         ['right_hip','right_knee'], ['right_knee','right_ankle']
@@ -154,7 +155,6 @@
     }
 
     function squatCounter(pose, mirrored) {
-      // pick side with better visibility
       const side = chooseSide(pose);
       const hip = getKP(pose, side + '_hip');
       const knee = getKP(pose, side + '_knee');
@@ -164,9 +164,7 @@
         return;
       }
       const ang = angle({x:hip.x,y:hip.y},{x:knee.x,y:knee.y},{x:ankle.x,y:ankle.y});
-      // form hint
       statusEl.textContent = `Угол колена: ${ang.toFixed(0)}° (${state})`;
-      // state machine
       if (ang < thresholds.down && state === 'up') {
         state = 'down';
       } else if (ang > thresholds.up && state === 'down') {
@@ -175,7 +173,7 @@
         countEl.textContent = count;
         beep();
       }
-      // overlay angle text near knee
+      // подпись возле колена
       ctx.save();
       if (mirrored) { ctx.translate(canvas.width, 0); ctx.scale(-1, 1); }
       ctx.fillStyle = '#ffeb3b';
@@ -187,7 +185,6 @@
     async function loop() {
       if (!running) return;
       const mirrored = (facingMode === 'user');
-      // estimate pose
       const poses = await detector.estimatePoses(video, { flipHorizontal: mirrored });
       ctx.clearRect(0,0,canvas.width,canvas.height);
       if (poses && poses[0]) {
@@ -195,7 +192,7 @@
         drawKeypointsAndSkeleton(pose, mirrored);
         if (exerciseSel.value === 'squat') squatCounter(pose, mirrored);
       } else {
-        // draw only video
+        // только видео
         ctx.save();
         if (mirrored) { ctx.translate(canvas.width, 0); ctx.scale(-1, 1); }
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
@@ -206,8 +203,8 @@
     }
 
     async function initDetector() {
+      try { await tf.setBackend('webgl'); } catch (e) { await tf.setBackend('cpu'); }
       await tf.ready();
-      await tf.setBackend('webgl');
       detector = await poseDetection.createDetector(
         poseDetection.SupportedModels.MoveNet,
         {
@@ -218,7 +215,7 @@
     }
 
     startBtn.addEventListener('click', async () => {
-      if (running) { // stop
+      if (running) {
         running = false;
         startBtn.textContent = 'Старт';
         statusEl.textContent = 'Пауза';
@@ -239,7 +236,6 @@
       if (running) await initCamera();
     });
 
-    // permission check
     if (!navigator.mediaDevices?.getUserMedia) {
       alert('Ваш браузер не поддерживает камеру (getUserMedia). Откройте в современном Chrome/Safari/Edge.');
     }
