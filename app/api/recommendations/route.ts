@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic';
 export async function GET(req:Request) {
   const params=new URL(req.url).searchParams; const mode=params.get('mode') || 'home';
   if(!['home','radio'].includes(mode)) return NextResponse.json({error:'Invalid mode'},{status:400});
-  const seed=params.get('seed') || ''; if(seed && !isVideoId(seed)) return NextResponse.json({error:'Invalid seed'},{status:400});
+  const seed=params.get('seed') || ''; const artist=(params.get('artist') || '').trim().slice(0,200); if(seed && !isVideoId(seed)) return NextResponse.json({error:'Invalid seed'},{status:400});
   const seen=(params.get('seen') || '').split(',').filter(isVideoId).slice(0,100);
   let signals:Signal[]=[]; let liked:Signal[]=[];
   const authorization=req.headers.get('authorization');
@@ -24,16 +24,18 @@ export async function GET(req:Request) {
   const getRelated=async(id:string)=>{try{return (await relatedCatalog(id)).value}catch{return [] as CatalogTrack[]}};
   if(mode==='radio') {
     const anchors=[seed,...profile.seeds].filter(isVideoId).slice(0,3);
-    const results=(await Promise.all(anchors.map(getRelated))).flat();
+    let results=(await Promise.all(anchors.map(getRelated))).flat();
+    let fallback=false;
+    if(!results.length && artist) {try { results=(await searchCatalog(`${artist} music`)).value; fallback=true; } catch {}}
     const tracks=cleanRecommendations(results,blocked,[...seen,...anchors]).slice(0,20);
-    return NextResponse.json({tracks,emptyReason:tracks.length?null:'Не удалось найти похожие треки. Попробуйте другое радио.'},{headers:{'Cache-Control':'no-store'}});
+    return NextResponse.json({tracks,fallback,emptyReason:tracks.length?null:'Не удалось найти похожие треки. Попробуйте другое радио.'},{headers:{'Cache-Control':'no-store'}});
   }
   const topLike=liked[0]?.video_id || signals.find(s=>s.event_type==='like'&&s.video_id)?.video_id;
   const [similar,daily,...trends]=await Promise.all([
-    topLike ? getRelated(topLike) : Promise.resolve([]),
+    topLike ? getRelated(topLike).then(async tracks=>{if(tracks.length)return tracks;const a=liked[0]?.artist || signals.find(s=>s.event_type==='like'&&s.video_id===topLike)?.artist;try{return a?(await searchCatalog(`${a} music`)).value:[]}catch{return []}}) : Promise.resolve([]),
     profile.artists.length ? Promise.all(profile.artists.map(async a=>{try{return (await searchCatalog(`${a} music`)).value.slice(0,6)}catch{return [] as CatalogTrack[]}})).then(xs=>xs.flat()) : Promise.resolve([]),
-    ...(['RU','US'] as const).map(async region=>{try{return (await trendingCatalog(region)).value.slice(0,10)}catch{return [] as CatalogTrack[]}}),
+    ...(['RU','US'] as const).map(async region=>{try{return {tracks:(await trendingCatalog(region)).value.slice(0,10),fallback:false}}catch{try{return {tracks:(await searchCatalog(region==='RU'?'популярная русская музыка':'popular music hits')).value.slice(0,10),fallback:true}}catch{return {tracks:[] as CatalogTrack[],fallback:true}}}}),
   ]);
   const recent=profile.recent.map(s=>({id:`yt:${s.video_id}`,video_id:s.video_id!,title:s.title,artist:s.artist,storage_path:null,source:'youtube' as const,thumbnail:`https://i.ytimg.com/vi/${s.video_id}/mqdefault.jpg`,duration:0}));
-  return NextResponse.json({similar:cleanRecommendations(similar,blocked,topLike?[topLike]:[]).slice(0,12),recent:cleanRecommendations(recent,blocked).slice(0,12),daily:cleanRecommendations(daily,blocked).slice(0,12),trending:cleanRecommendations(trends.flat(),blocked).slice(0,16),personalized:!!signals.length},{headers:{'Cache-Control':'no-store'}});
+  return NextResponse.json({similar:cleanRecommendations(similar,blocked,topLike?[topLike]:[]).slice(0,12),recent:cleanRecommendations(recent,blocked).slice(0,12),daily:cleanRecommendations(daily,blocked).slice(0,12),trending:cleanRecommendations(trends.flatMap(x=>x.tracks),blocked).slice(0,16),trendingFallback:trends.some(x=>x.fallback),personalized:!!signals.length},{headers:{'Cache-Control':'no-store'}});
 }

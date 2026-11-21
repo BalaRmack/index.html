@@ -8,7 +8,7 @@ import { ArrowLeft, ArrowRight, AudioLines, ChevronDown, Clock3, Heart, Home, Li
 
 type Track = { id:string; title:string; artist:string; storage_path:string|null; owner_id?:string|null; source?:'local'|'youtube'; video_id?:string|null; thumbnail?:string|null; duration?:number };
 type Playlist = { id:string; name:string };
-type Shelves = {similar:Track[];recent:Track[];daily:Track[];trending:Track[]};
+type Shelves = {similar:Track[];recent:Track[];daily:Track[];trending:Track[];trendingFallback?:boolean};
 const demo: Track = { id:'demo-outfoxing', title:'Outfoxing the Fox', artist:'Kevin MacLeod', storage_path:null };
 const covers = [
   'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=500&q=80',
@@ -177,8 +177,8 @@ export default function HomePage() {
   async function moreRadio(seed:Track) {
     if(!seed.video_id) {setNotice('Радио доступно для треков из каталога.');return [];}
     const headers=await authHeaders();
-    const p=new URLSearchParams({mode:'radio',seed:seed.video_id,seen:playedIds.current.slice(-100).join(',')});
-    const r=await fetch(`/api/recommendations?${p}`,{headers});const data=await r.json();if(!r.ok)throw new Error(data.error||'Не удалось загрузить радио.');return data.tracks as Track[];
+    const p=new URLSearchParams({mode:'radio',seed:seed.video_id,artist:seed.artist,seen:playedIds.current.slice(-100).join(',')});
+    const r=await fetch(`/api/recommendations?${p}`,{headers});const data=await r.json();if(!r.ok)throw new Error(data.error||'Не удалось загрузить радио.');if(data.fallback)setNotice('Похожие треки недоступны: используем поиск по исполнителю.');return data.tracks as Track[];
   }
   async function skip(direction:number,automatic=false) {
     if(!automatic) recordSwitch();
@@ -263,7 +263,7 @@ export default function HomePage() {
           <Shelf title="Похоже на ваши лайки" subtitle="На основе понравившихся треков" items={shelves.similar} onPlay={(t,list)=>void playTrack(t,list)} onRadio={t=>void startRadio(t)} />
           <Shelf title="Недавно слушали" subtitle="Треки, к которым хочется вернуться" items={shelves.recent} onPlay={(t,list)=>void playTrack(t,list)} onRadio={t=>void startRadio(t)} />
           <Shelf title="Микс дня" subtitle="По вашим любимым исполнителям" items={shelves.daily} onPlay={(t,list)=>void playTrack(t,list)} onRadio={t=>void startRadio(t)} />
-          <Shelf title="В тренде" subtitle="Музыка из российских и мировых подборок зеркал" items={shelves.trending} onPlay={(t,list)=>void playTrack(t,list)} onRadio={t=>void startRadio(t)} />
+          <Shelf title="В тренде" subtitle={shelves.trendingFallback?"Популярные поисковые запросы — тренды зеркал недоступны":"Российские и мировые подборки зеркал"} items={shelves.trending} onPlay={(t,list)=>void playTrack(t,list)} onRadio={t=>void startRadio(t)} />
           {!user && <p className="catalog-status">Войдите, чтобы сохранять историю и получать персональные подборки.</p>}</div></>}
         <section className="section tracks-section"><div className="section-heading"><div><div className="eyebrow">{isHome?'PICK UP WHERE YOU LEFT OFF':'YOUR MUSIC, ALL IN ONE PLACE'}</div><h2>{title} <span>✳</span></h2><p>{search?'Поиск по вашей библиотеке и публичным каталогам.':isHome?'Ваши сохранённые треки.':'Ваша личная коллекция.'}</p></div>{isHome && <button onClick={()=>setView('library')}>See all <ArrowRight size={15}/></button>}</div><div className="track-head"><span>#</span><span>TITLE</span><span>ALBUM</span><span>ADDED</span><span><Clock3 size={15}/></span><span/></div><div className="track-list">{search && searchStatus && <div className="catalog-status">{searchStatus}</div>}{visible.length ? visible.map((t,i)=><div className={`track-row ${current.id===t.id&&playing?'is-playing':''}`} key={t.id}><button className="track-number" onClick={()=>void playTrack(t,visible)}>{current.id===t.id&&playing?<AudioLines size={16}/>:<><span>{String(i+1).padStart(2,'0')}</span><Play className="row-play" size={15} fill="currentColor"/></>}</button><button className="track-title" onClick={()=>void playTrack(t,visible)}><span className="track-art" style={{backgroundImage:`url('${imageFor(t)}')`}}/><span><b>{t.title}</b><small>{t.artist}</small></span></button><span className="track-album">{t.video_id?'Каталог':t.id===demo.id?'Демо':'Ваши файлы'}</span><span className="track-added">{t.video_id?'Стриминг':t.id===demo.id?'Демо':'Недавно'}</span><span className="track-time">{current.id===t.id&&duration?format(duration):t.duration?format(t.duration):'—'}</span><div className="track-controls">{t.video_id && <button title="Запустить радио по треку" aria-label={`Радио: ${t.title}`} onClick={()=>void startRadio(t)}><Radio size={16}/></button>}<button aria-label="Like track" onClick={()=>void toggleLike(t)} className={likes.includes(t.id)?'liked':''}><Heart size={16} fill={likes.includes(t.id)?'currentColor':'none'}/></button>{playlists.length>0 && <select aria-label="Add to playlist" value="" onChange={e=>void addToPlaylist(t,e.target.value)}><option value="">＋</option>{playlists.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select>}</div></div>) : <div className="empty">No tracks here yet. {view==='liked'?'Like a song to save it here.':view.startsWith('playlist:')?'Add tracks using the + menu in your library.':'Try another search or upload your own music.'}</div>}</div></section>
         <footer>MADE FOR LISTENING <span>✳</span> STAY A WHILE</footer>
