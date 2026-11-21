@@ -1,5 +1,5 @@
 import type { CatalogTrack } from './catalog';
-export type Signal = {track_id:string;video_id:string|null;title:string;artist:string;event_type:'like'|'playlist_add'|'complete'|'skip';created_at:string};
+export type Signal = {track_id:string;video_id:string|null;title:string;artist:string;event_type:'like'|'playlist_add'|'complete'|'skip'|'listen';created_at:string};
 export function taste(signals:Signal[]) {
   const skips=new Map<string,number>(); const artists=new Map<string,number>(); const seeds:string[]=[]; const recent:Signal[]=[];
   for(const s of signals) {
@@ -14,4 +14,27 @@ export function taste(signals:Signal[]) {
 }
 export function cleanRecommendations(tracks:CatalogTrack[],excluded:Set<string>,seen:string[]=[]) {
   const ids=new Set(seen); return tracks.filter(t=>{if(excluded.has(t.video_id)||ids.has(t.video_id))return false;ids.add(t.video_id);return true});
+}
+
+/** Signals such as likes are preferences, not evidence that a track was played. */
+export function recentlyPlayed(signals:Signal[],now=Date.now()) {
+  const cutoff=now-24*60*60*1000;const ids=new Set<string>();const recordings=new Set<string>();
+  for(const s of signals) if(['listen','complete','skip'].includes(s.event_type) && Date.parse(s.created_at)>=cutoff) {
+    if(s.video_id)ids.add(s.video_id);
+    if(s.title&&s.artist)recordings.add(recordingKey(s.artist,s.title));
+  }
+  return {ids,recordings};
+}
+const cleanKey=(s:string)=>s.toLocaleLowerCase().normalize('NFKC').replace(/\s*[-–—]\s*topic$/i,'').replace(/[^\p{L}\p{N}]+/gu,' ').trim();
+export const recordingKey=(artist:string,title:string)=>`${cleanKey(artist)}|${cleanKey(title)}`;
+/** Keep source order where possible; never place the same artist consecutively. */
+export function diverseRecommendations(tracks:CatalogTrack[],blocked:Set<string>,seen:string[],recentRecordings:Set<string>,previousArtist='',limit=20) {
+  const pool=cleanRecommendations(tracks,blocked,seen).filter(t=>!recentRecordings.has(recordingKey(t.artist,t.title)));
+  const out:CatalogTrack[]=[];let last=cleanKey(previousArtist);
+  while(pool.length && out.length<limit) {
+    const index=pool.findIndex(t=>cleanKey(t.artist)!==last);
+    if(index<0)break;
+    const [track]=pool.splice(index,1);out.push(track);last=cleanKey(track.artist);
+  }
+  return out;
 }

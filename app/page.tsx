@@ -9,7 +9,7 @@ import { ArrowLeft, ArrowRight, AudioLines, ChevronDown, Clock3, Heart, Home, Li
 
 type Track = { id:string; title:string; artist:string; storage_path:string|null; owner_id?:string|null; source?:'local'|'youtube'|'deezer'|'jiosaavn'; video_id?:string|null; external_id?:string|null; thumbnail?:string|null; duration?:number };
 type Playlist = { id:string; name:string };
-type Shelves = {similar:Track[];recent:Track[];daily:Track[];trending:Track[];trendingFallback?:boolean};
+type Shelves = {similar:Track[];recent:Track[];daily:Track[];trending:Track[];trendingFallback?:boolean;similarUnavailable?:boolean};
 const demo: Track = { id:'demo-outfoxing', title:'Outfoxing the Fox', artist:'Kevin MacLeod', storage_path:null };
 const covers = [
   'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=500&q=80',
@@ -66,6 +66,7 @@ export default function HomePage() {
   const requestSeq = useRef(0);
   const radioRequest = useRef(false);
   const playback = useRef({seconds:0,last:0,completed:false,started:false});
+  const listenRecorded = useRef(false);
 
   useEffect(() => {
     if (!supabase) return;
@@ -109,16 +110,17 @@ export default function HomePage() {
   useEffect(() => () => { ++requestSeq.current; audio.current?.pause(); void ctx.current?.close(); },[]);
 
   async function authHeaders() {const session=await supabase?.auth.getSession();const token=session?.data.session?.access_token;return token?{Authorization:`Bearer ${token}`} : undefined;}
-  async function logSignal(track:Track,event_type:'like'|'playlist_add'|'complete'|'skip',seconds=0) {
+  async function logSignal(track:Track,event_type:'like'|'playlist_add'|'complete'|'skip'|'listen',seconds=0) {
     if(!user || !supabase) return;
     const {error}=await supabase.from('listening_history').insert({user_id:user.id,track_id:track.id,video_id:track.video_id || null,title:track.title.slice(0,300),artist:track.artist.slice(0,200),event_type,listened_seconds:Math.max(0,Math.floor(seconds))});
     if(error) setNotice('Не удалось сохранить историю прослушивания.');
-    else if(event_type!=='skip') setRefreshShelves(x=>x+1);
+    else if(event_type!=='skip' && event_type!=='listen') setRefreshShelves(x=>x+1);
   }
   function recordSwitch() { const p=playback.current; if(shouldRecordSkip(p)) void logSignal(currentRef.current,'skip',p.seconds); }
+  function recordListen() {if(!listenRecorded.current && playback.current.seconds>=5){listenRecorded.current=true;void logSignal(currentRef.current,'listen',playback.current.seconds);}}
   function onTime(time:number) {
     const p=playback.current; const player=audio.current; setElapsed(time);
-    if(advanceListening(p,time,player?.duration || 0,!!player && !player.paused,!!player?.seeking)) void logSignal(currentRef.current,'complete',p.seconds);
+    if(advanceListening(p,time,player?.duration || 0,!!player && !player.paused,!!player?.seeking)) void logSignal(currentRef.current,'complete',p.seconds);recordListen();
   }
   function initAudio(remote:boolean) {
     const existing=audio.current;
@@ -147,7 +149,7 @@ export default function HomePage() {
       seq=++requestSeq.current; if(!track.video_id)yt.current?.stop(); audio.current?.pause();setSoundcloudUrl(null);
       if(list) {queue.current=list;queueIndex.current=Math.max(0,list.findIndex(x=>x.id===track.id));playedIds.current=[];}
       if(track.video_id && !playedIds.current.includes(track.video_id)) playedIds.current.push(track.video_id);
-      playback.current={seconds:0,last:0,completed:false,started:false};
+      playback.current={seconds:0,last:0,completed:false,started:false};listenRecorded.current=false;
       setCurrent(track); currentRef.current=track; setElapsed(0);setDuration(0);setPlaying(false);setLoading(true);
       if(track.video_id) { setYoutubeActive(true);yt.current?.load(track.video_id);return; }
       setYoutubeActive(false);
@@ -164,7 +166,7 @@ export default function HomePage() {
     if(!seed.video_id) {setNotice('Радио доступно для треков из каталога.');return [];}
     const headers=await authHeaders();
     const p=new URLSearchParams({mode:'radio',seed:seed.video_id,artist:seed.artist,seen:playedIds.current.slice(-100).join(',')});
-    const r=await fetch(`/api/recommendations?${p}`,{headers});const data=await r.json();if(!r.ok)throw new Error(data.error||'Не удалось загрузить радио.');if(data.fallback)setNotice('Похожие треки недоступны: используем поиск по исполнителю.');return data.tracks as Track[];
+    const r=await fetch(`/api/recommendations?${p}`,{headers});const data=await r.json();if(!r.ok)throw new Error(data.error||'Не удалось загрузить радио.');return data.tracks as Track[];
   }
   async function skip(direction:number,automatic=false) {
     if(!automatic) recordSwitch();
@@ -270,12 +272,12 @@ export default function HomePage() {
     </aside>
     <main className="main">
       <header className="topbar"><div className="history"><button aria-label="Назад" onClick={()=>history.back()}><ArrowLeft size={18}/></button><button aria-label="Вперёд" onClick={()=>history.forward()}><ArrowRight size={18}/></button></div><div className="search-wrap"><Search size={17}/><input id="search" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Исполнитель или название трека"/><span>⌘ K</span></div><div className="top-actions"><button className="upload-button" onClick={()=>user?fileInput.current?.click():setAuthOpen(true)}><Upload size={16}/><span>{busy?'Загружаем…':'Загрузить музыку'}</span></button><input ref={fileInput} type="file" accept="audio/*" hidden onChange={e=>{const f=e.target.files?.[0];if(f) void upload(f);e.target.value=''}}/><button className="profile" aria-label={user?'Выйти из аккаунта':'Войти'} onClick={()=>user?void supabase?.auth.signOut():setAuthOpen(true)}><span className="avatar">{user?.email?.[0].toUpperCase() || 'N'}</span><span>{user ? user.email?.split('@')[0] : 'Гость'}</span>{user?<LogOut size={15}/>:<ChevronDown size={15}/>}</button></div></header>
-    <YouTubePlayer ref={yt} active={youtubeActive} videoId={current.video_id||null} volume={volume} onFindAlternative={()=>{setSearch(`${current.artist} ${current.title}`);setSearchSource('deezer');setView('library');}} onClose={()=>{yt.current?.stop();setYoutubeActive(false);setPlaying(false);setLoading(false);}} onProgress={(time,d)=>{setElapsed(time);setDuration(d);if(advanceListening(playback.current,time,d,true,false))void logSignal(currentRef.current,'complete',playback.current.seconds);}} onState={state=>{if(state==='playing'){playback.current.started=true;setPlaying(true);setLoading(false);}else if(state==='paused'){setPlaying(false);setLoading(false);}else {setPlaying(false);if(repeat){playback.current={seconds:0,last:0,completed:false,started:true};yt.current?.seek(0);yt.current?.play();}else void skip(1,true);}}} onError={message=>{setLoading(false);setPlaying(false);setNotice(message);}} />
+    <YouTubePlayer ref={yt} active={youtubeActive} videoId={current.video_id||null} volume={volume} onFindAlternative={()=>{setSearch(`${current.artist} ${current.title}`);setSearchSource('deezer');setView('library');}} onClose={()=>{yt.current?.stop();setYoutubeActive(false);setPlaying(false);setLoading(false);}} onProgress={(time,d)=>{setElapsed(time);setDuration(d);if(advanceListening(playback.current,time,d,true,false))void logSignal(currentRef.current,'complete',playback.current.seconds);recordListen();}} onState={state=>{if(state==='playing'){playback.current.started=true;setPlaying(true);setLoading(false);}else if(state==='paused'){setPlaying(false);setLoading(false);}else {setPlaying(false);if(repeat){playback.current={seconds:0,last:0,completed:false,started:true};listenRecorded.current=false;yt.current?.seek(0);yt.current?.play();}else void skip(1,true);}}} onError={message=>{setLoading(false);setPlaying(false);setNotice(message);}} />
       <div className="content">
         {isHome && <><div className="greeting"><div><div className="eyebrow"><span className="green-dot"/> ВАША МУЗЫКА, ВАШ МИР</div><h1>Рады вас видеть<span>.</span></h1><p>Найдите музыку для своего дня.</p></div><span className="date-label">БОЛЬШЕ МЕСТА ДЛЯ МУЗЫКИ <AudioLines size={16}/></span></div>
           <section className="hero"><div className="hero-content"><div className="hero-kicker"><Sparkles size={14}/> ПОДБОРКА NOCTURNE <span>01 / 05</span></div><h2>Музыка для<br/><em>ваших моментов.</em></h2><p>Откройте музыку для каждого момента.<br/>Ваше радио становится лучше вместе с вами.</p><div className="hero-actions"><button className="primary" onClick={()=>void startRadio(shelves.similar[0] || shelves.recent[0] || shelves.daily[0] || shelves.trending[0])} disabled={![...shelves.similar,...shelves.recent,...shelves.daily,...shelves.trending].length}><Play size={15} fill="currentColor"/> Моя волна</button><button className="hero-link" onClick={()=>setView('library')}>Открыть медиатеку <ArrowRight size={16}/></button></div></div><div className="hero-caption"><span>ПОДОБРАНО ДЛЯ ВАС</span><b>Найдите свой<br/>ритм спокойствия.</b></div><div className="hero-index"><span className="selected"/> <span/> <span/> <span/></div></section>
           <div className="recommendations"><div className="recommendations-heading"><div><div className="eyebrow">МУЗЫКА ДЛЯ ВАС</div><h2>Откройте что-то новое <span>✳</span></h2></div><button onClick={()=>setRefreshShelves(x=>x+1)}>Обновить <ArrowRight size={15}/></button></div>{shelfStatus && <p className="catalog-status">{shelfStatus}</p>}
-          <Shelf title="Похоже на ваши лайки" subtitle="На основе понравившихся треков" items={shelves.similar} onPlay={(t,list)=>void playTrack(t,list)} onRadio={t=>void startRadio(t)} />
+          {shelves.similarUnavailable && <p className="catalog-status">Источники похожей музыки временно недоступны.</p>}<Shelf title="Похоже на ваши лайки" subtitle="На основе понравившихся треков" items={shelves.similar} onPlay={(t,list)=>void playTrack(t,list)} onRadio={t=>void startRadio(t)} />
           <Shelf title="Недавно слушали" subtitle="Треки, к которым хочется вернуться" items={shelves.recent} onPlay={(t,list)=>void playTrack(t,list)} onRadio={t=>void startRadio(t)} />
           <Shelf title="Микс дня" subtitle="По вашим любимым исполнителям" items={shelves.daily} onPlay={(t,list)=>void playTrack(t,list)} onRadio={t=>void startRadio(t)} />
           <Shelf title="В тренде" subtitle={shelves.trendingFallback?"Популярные поисковые запросы — тренды зеркал недоступны":"Российские и мировые подборки зеркал"} items={shelves.trending} onPlay={(t,list)=>void playTrack(t,list)} onRadio={t=>void startRadio(t)} />
@@ -287,7 +289,7 @@ export default function HomePage() {
     <div className="player"><div className="now-playing"><div className="player-art" style={{backgroundImage:`url('${imageFor(current)}')`}}/><div><b>{current.title}</b><small>{displayArtist(current.artist)}</small></div><button className={likes.includes(current.id)?'liked':''} onClick={()=>void toggleLike(current)} aria-label="Нравится текущий трек"><Heart size={17} fill={likes.includes(current.id)?'currentColor':'none'}/></button></div><div className="player-center"><div className="player-buttons"><button className={shuffle?'on':''} onClick={()=>setShuffle(!shuffle)} aria-label="Перемешать"><Shuffle size={16}/></button><button onClick={()=>void skip(-1)} aria-label="Предыдущий трек"><SkipBack size={18} fill="currentColor"/></button><button className="play-main" onClick={()=>void playTrack(current)} aria-label={playing?'Пауза':'Воспроизвести'}>{loading?<AudioLines size={19}/>:playing?<Pause size={19} fill="currentColor"/>:<Play size={19} fill="currentColor"/>}</button><button onClick={()=>void skip(1)} aria-label="Следующий трек"><SkipForward size={18} fill="currentColor"/></button><button className={repeat?'on':''} onClick={()=>setRepeat(!repeat)} aria-label="Повтор"><Repeat2 size={17}/></button></div><div className="progress"><span>{format(elapsed)}</span><input aria-label="Перемотка" type="range" min="0" max={duration||0} value={Math.min(elapsed,duration||0)} onChange={e=>{if(current.video_id && youtubeActive)yt.current?.seek(Number(e.target.value));else if(audio.current) audio.current.currentTime=Number(e.target.value);playback.current.last=Number(e.target.value);setElapsed(Number(e.target.value))}} style={{'--progress':`${duration?elapsed/duration*100:0}%`} as React.CSSProperties}/><span>{format(duration)}</span></div></div><div className="player-right"><button title="Медиатека" aria-label="Медиатека" onClick={()=>setView('library')}><ListMusic size={18}/></button><button onClick={()=>setVolume(volume?0:70)} aria-label="Выключить звук">{volume?<Volume2 size={18}/>:<VolumeX size={18}/>}</button><input aria-label="Громкость" type="range" min="0" max="100" value={volume} onChange={e=>setVolume(Number(e.target.value))} style={{'--progress':`${volume}%`} as React.CSSProperties}/><span>{volume}%</span></div></div>
     {soundcloudUrl && <aside className="soundcloud-panel"><div className="youtube-header"><span>SOUNDCLOUD · ВИДЖЕТ</span><button onClick={()=>setSoundcloudUrl(null)} aria-label="Закрыть SoundCloud">×</button></div><iframe title="SoundCloud player" width="100%" height="166" allow="autoplay" src={`https://w.soundcloud.com/player/?url=${encodeURIComponent(soundcloudUrl)}&auto_play=false`} /><small>Управляйте воспроизведением в виджете SoundCloud.</small></aside>}
     {/* Local audio events. */}
-    <AudioEvents audio={audio} playing={playing} trackId={current.id} onTime={onTime} onDuration={setDuration} onEnded={()=>{setPlaying(false);if(repeat && audio.current){playback.current={seconds:0,last:0,completed:false,started:true};audio.current.currentTime=0;void audio.current.play().then(()=>setPlaying(true)).catch(()=>setNotice('Ошибка воспроизведения.'));}else void skip(1,true)}} onError={()=>{if(!currentRef.current.video_id){setPlaying(false);setNotice('Не удалось загрузить аудио.');}}} />
+    <AudioEvents audio={audio} playing={playing} trackId={current.id} onTime={onTime} onDuration={setDuration} onEnded={()=>{setPlaying(false);if(repeat && audio.current){playback.current={seconds:0,last:0,completed:false,started:true};listenRecorded.current=false;audio.current.currentTime=0;void audio.current.play().then(()=>setPlaying(true)).catch(()=>setNotice('Ошибка воспроизведения.'));}else void skip(1,true)}} onError={()=>{if(!currentRef.current.video_id){setPlaying(false);setNotice('Не удалось загрузить аудио.');}}} />
     {notice && <div className="toast" role="status">{notice}<button aria-label="Закрыть уведомление" onClick={()=>setNotice('')}><X size={16}/></button></div>}
     {authOpen && <div className="modal-backdrop" onClick={()=>setAuthOpen(false)}><div className="modal" onClick={e=>e.stopPropagation()}><button className="modal-close" aria-label="Закрыть" onClick={()=>setAuthOpen(false)}><X size={19}/></button><span className="brand-icon"><AudioLines size={22}/></span><h2>Ваша музыка всегда с вами.</h2><p>Войдите, чтобы сохранять любимые треки, создавать плейлисты и загружать музыку.</p><form onSubmit={signIn}><label htmlFor="email">ЭЛЕКТРОННАЯ ПОЧТА</label><input id="email" type="email" placeholder="you@example.com" value={email} onChange={e=>setEmail(e.target.value)} required/><button className="primary" disabled={busy}>{busy?'Отправляем…':'Получить ссылку для входа'} <ArrowRight size={16}/></button></form><small>Пароль не нужен — отправим ссылку для входа на почту.</small></div></div>}
   </div>;
