@@ -1,10 +1,20 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 import { isVideoId, searchCatalog, trendingCatalog, type CatalogTrack } from '@/lib/catalog';
+import { fallbackShelves } from '@/lib/fallback-tracks';
 import { youtubeRadio, deezerRadio } from '@/lib/radio-sources';
 import { cleanRecommendations, diverseRecommendations, recentlyPlayed, taste, type Signal } from '@/lib/recommendations';
 export const dynamic = 'force-dynamic';
 export async function GET(req:Request) {
+  // Home must never wait for the slowest of many sequential mirrors or auth.
+  if((new URL(req.url).searchParams.get('mode')||'home')!=='home') return handle(req);
+  let timer:ReturnType<typeof setTimeout>|undefined;
+  try {
+    return await Promise.race([handle(req),new Promise<NextResponse>(resolve=>{timer=setTimeout(()=>resolve(NextResponse.json(fallbackShelves(),{headers:{'Cache-Control':'no-store'}})),3800)})]);
+  } catch {return NextResponse.json(fallbackShelves(),{headers:{'Cache-Control':'no-store'}});}
+  finally {if(timer)clearTimeout(timer);}
+}
+async function handle(req:Request) {
   const params=new URL(req.url).searchParams;const mode=params.get('mode')||'home';
   if(!['home','radio'].includes(mode))return NextResponse.json({error:'Invalid mode'},{status:400});
   const seed=params.get('seed')||'';const artist=(params.get('artist')||'').trim().slice(0,200);
@@ -47,6 +57,7 @@ export async function GET(req:Request) {
     profile.artists.length?Promise.all(profile.artists.map(async a=>{try{return (await searchCatalog(`${a} music`)).value.slice(0,6)}catch{return [] as CatalogTrack[]}})).then(xs=>xs.flat()):Promise.resolve([]),
     ...(['RU','US'] as const).map(async region=>{try{return {tracks:(await trendingCatalog(region)).value.slice(0,10),fallback:false}}catch{try{return {tracks:(await searchCatalog(region==='RU'?'популярная русская музыка':'popular music hits')).value.slice(0,10),fallback:true}}catch{return {tracks:[] as CatalogTrack[],fallback:true}}}}),
   ]);
+  if(!related.tracks.length&&!daily.length&&!trends.some(x=>x.tracks.length))return NextResponse.json(fallbackShelves(),{headers:{'Cache-Control':'no-store'}});
   const recentTracks=profile.recent.map(s=>({id:`yt:${s.video_id}`,video_id:s.video_id!,title:s.title,artist:s.artist,storage_path:null,source:'youtube' as const,thumbnail:`https://i.ytimg.com/vi/${s.video_id}/mqdefault.jpg`,duration:0}));
-  return NextResponse.json({similar:diverseRecommendations(related.tracks,blocked,top?.video_id?[top.video_id]:[],recent.recordings,'',12),recent:cleanRecommendations(recentTracks,profile.excluded).slice(0,12),daily:diverseRecommendations(daily,blocked,[],recent.recordings,'',12),trending:diverseRecommendations(trends.flatMap(x=>x.tracks),blocked,[],recent.recordings,'',16),trendingFallback:trends.some(x=>x.fallback),similarUnavailable:!!top&&!related.providers.length,personalized:!!signals.length},{headers:{'Cache-Control':'no-store'}});
+  return NextResponse.json({similar:diverseRecommendations(related.tracks,blocked,top?.video_id?[top.video_id]:[],recent.recordings,'',12),recent:cleanRecommendations(recentTracks,profile.excluded).slice(0,12),daily:diverseRecommendations(daily,blocked,[],recent.recordings,'',12),trending:diverseRecommendations(trends.flatMap(x=>x.tracks),blocked,[],recent.recordings,'',16),trendingFallback:trends.some(x=>x.fallback),editorialFallback:false,similarUnavailable:!!top&&!related.providers.length,personalized:!!signals.length},{headers:{'Cache-Control':'no-store'}});
 }

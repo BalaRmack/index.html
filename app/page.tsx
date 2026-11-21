@@ -4,12 +4,13 @@ import { useEffect, useRef, useState } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import YouTubePlayer, { type YouTubePlayerHandle } from '@/components/YouTubePlayer';
+import { fallbackShelves } from '@/lib/fallback-tracks';
 import { advanceListening, shouldRecordSkip } from '@/lib/listening';
 import { ArrowLeft, ArrowRight, AudioLines, ChevronDown, Clock3, Heart, Home, Library, ListMusic, LogOut, Music2, Pause, Play, Plus, Radio, Repeat2, Search, Shuffle, SkipBack, SkipForward, Sparkles, Upload, Volume2, VolumeX, X } from 'lucide-react';
 
 type Track = { id:string; title:string; artist:string; storage_path:string|null; owner_id?:string|null; source?:'local'|'youtube'|'deezer'|'jiosaavn'; video_id?:string|null; external_id?:string|null; thumbnail?:string|null; duration?:number };
 type Playlist = { id:string; name:string };
-type Shelves = {similar:Track[];recent:Track[];daily:Track[];trending:Track[];trendingFallback?:boolean;similarUnavailable?:boolean};
+type Shelves = {similar:Track[];recent:Track[];daily:Track[];trending:Track[];trendingFallback?:boolean;similarUnavailable?:boolean;editorialFallback?:boolean};
 const demo: Track = { id:'demo-outfoxing', title:'Outfoxing the Fox', artist:'Kevin MacLeod', storage_path:null };
 const covers = [
   'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=500&q=80',
@@ -97,15 +98,24 @@ export default function HomePage() {
   },[search,searchSource]);
   useEffect(() => { setShelves({similar:[],recent:[],daily:[],trending:[]}); },[user?.id]);
   useEffect(() => {
-    const controller=new AbortController();
+    const controller=new AbortController();let disposed=false;
+    setShelfStatus('Загружаем подборки…');
+    const timer=setTimeout(()=>{if(!disposed){controller.abort();setShelves(fallbackShelves());setShelfStatus('');}},5000);
     async function load() {
-      setShelfStatus('Загружаем подборки…');
-      const session=await supabase?.auth.getSession(); const token=session?.data.session?.access_token;
-      try {const r=await fetch('/api/recommendations?mode=home',{headers:token?{Authorization:`Bearer ${token}`}:{},signal:controller.signal});const data=await r.json();if(!r.ok)throw new Error(data.error);setShelves(data);setShelfStatus(data.similar.length||data.recent.length||data.daily.length||data.trending.length?'':'Зеркала временно недоступны.');}
-      catch(e){if((e as Error).name!=='AbortError')setShelfStatus('Не удалось загрузить подборки.');}
+      try {
+        const session=await supabase?.auth.getSession();if(controller.signal.aborted)return;
+        const token=session?.data.session?.access_token;
+        const r=await fetch('/api/recommendations?mode=home',{headers:token?{Authorization:`Bearer ${token}`}:{},signal:controller.signal});
+        const data=await r.json();if(!r.ok)throw new Error(data.error);
+        if(disposed||controller.signal.aborted)return;
+        if(![data.similar,data.recent,data.daily,data.trending].some(Array.isArray))throw new Error('Invalid shelves');
+        const hasTracks=[data.similar,data.recent,data.daily,data.trending].some((x:unknown)=>Array.isArray(x)&&x.length);
+        setShelves(hasTracks?{...data,similar:Array.isArray(data.similar)?data.similar:[],recent:Array.isArray(data.recent)?data.recent:[],daily:Array.isArray(data.daily)?data.daily:[],trending:Array.isArray(data.trending)?data.trending:[]}:fallbackShelves());setShelfStatus('');clearTimeout(timer);
+      } catch {if(!disposed&&!controller.signal.aborted){clearTimeout(timer);setShelves(fallbackShelves());setShelfStatus('');}}
     }
-    void load(); return ()=>controller.abort();
+    void load(); return ()=>{disposed=true;clearTimeout(timer);controller.abort();};
   },[user,refreshShelves]);
+  useEffect(() => {if(youtubeActive)yt.current?.cue(!shuffle?queue.current[queueIndex.current+1]?.video_id||null:null);},[shuffle,youtubeActive]);
   useEffect(() => { if(gain.current) gain.current.gain.value = volume/100; if(audio.current?.dataset.remote) audio.current.volume=volume/100; yt.current?.volume(volume); },[volume]);
   useEffect(() => () => { ++requestSeq.current; audio.current?.pause(); void ctx.current?.close(); },[]);
 
@@ -151,7 +161,7 @@ export default function HomePage() {
       if(track.video_id && !playedIds.current.includes(track.video_id)) playedIds.current.push(track.video_id);
       playback.current={seconds:0,last:0,completed:false,started:false};listenRecorded.current=false;
       setCurrent(track); currentRef.current=track; setElapsed(0);setDuration(0);setPlaying(false);setLoading(true);
-      if(track.video_id) { setYoutubeActive(true);yt.current?.load(track.video_id);return; }
+      if(track.video_id) { setYoutubeActive(true);yt.current?.load(track.video_id);yt.current?.cue(!shuffle?queue.current[queueIndex.current+1]?.video_id||null:null);return; }
       setYoutubeActive(false);
       const remote=Boolean(track.external_id);const player=initAudio(remote);player.pause();player.removeAttribute('src');player.load();
       {
@@ -280,7 +290,7 @@ export default function HomePage() {
           {shelves.similarUnavailable && <p className="catalog-status">Источники похожей музыки временно недоступны.</p>}<Shelf title="Похоже на ваши лайки" subtitle="На основе понравившихся треков" items={shelves.similar} onPlay={(t,list)=>void playTrack(t,list)} onRadio={t=>void startRadio(t)} />
           <Shelf title="Недавно слушали" subtitle="Треки, к которым хочется вернуться" items={shelves.recent} onPlay={(t,list)=>void playTrack(t,list)} onRadio={t=>void startRadio(t)} />
           <Shelf title="Микс дня" subtitle="По вашим любимым исполнителям" items={shelves.daily} onPlay={(t,list)=>void playTrack(t,list)} onRadio={t=>void startRadio(t)} />
-          <Shelf title="В тренде" subtitle={shelves.trendingFallback?"Популярные поисковые запросы — тренды зеркал недоступны":"Российские и мировые подборки зеркал"} items={shelves.trending} onPlay={(t,list)=>void playTrack(t,list)} onRadio={t=>void startRadio(t)} />
+          <Shelf title="В тренде" subtitle={shelves.editorialFallback?"Резервная редакционная подборка — не персональные рекомендации":shelves.trendingFallback?"Популярные поисковые запросы — тренды зеркал недоступны":"Российские и мировые подборки зеркал"} items={shelves.trending} onPlay={(t,list)=>void playTrack(t,list)} onRadio={t=>void startRadio(t)} />
           {!user && <p className="catalog-status">Войдите, чтобы сохранять историю и получать персональные подборки.</p>}</div></>}
         <section className="section tracks-section"><div className="section-heading"><div><div className="eyebrow">{isHome?'ПРОДОЛЖАЙТЕ СЛУШАТЬ':'ВАША МУЗЫКА В ОДНОМ МЕСТЕ'}</div><h2>{title} <span>✳</span></h2><p>{search?'Поиск по вашей библиотеке и публичным каталогам.':isHome?'Ваши сохранённые треки.':'Ваша личная коллекция.'}</p></div>{isHome && <button onClick={()=>setView('library')}>Показать все <ArrowRight size={15}/></button>}</div><div className="track-head"><span>#</span><span>НАЗВАНИЕ</span><span>АЛЬБОМ</span><span>ДОБАВЛЕНО</span><span><Clock3 size={15}/></span><span/></div>{search && <div className="source-tabs" aria-label="Источник поиска">{([['youtube','YouTube'],['deezer','Deezer · превью'],['jiosaavn','JioSaavn']] as const).map(([id,label])=><button key={id} className={searchSource===id?'selected':''} onClick={()=>setSearchSource(id)}>{label}</button>)}<a href={`https://soundcloud.com/search/sounds?q=${encodeURIComponent(search)}`} target="_blank" rel="noreferrer">SoundCloud ↗</a><button onClick={openSoundcloud}>Вставить ссылку SoundCloud</button></div>}<div className="track-list">{search && searchStatus && <div className="catalog-status">{searchStatus}</div>}{visible.length ? visible.map((t,i)=><div className={`track-row ${current.id===t.id&&playing?'is-playing':''}`} key={t.id}><button className="track-number" onClick={()=>void playTrack(t,visible)}>{current.id===t.id&&playing?<AudioLines size={16}/>:<><span>{String(i+1).padStart(2,'0')}</span><Play className="row-play" size={15} fill="currentColor"/></>}</button><button className="track-title" onClick={()=>void playTrack(t,visible)}><span className="track-art" style={{backgroundImage:`url('${imageFor(t)}')`}}/><span><b>{t.title}</b><small>{displayArtist(t.artist)}</small></span></button><span className="track-album">{t.video_id?'YouTube':t.source==='deezer'?'Deezer · 30 сек.':t.source==='jiosaavn'?'JioSaavn':t.id===demo.id?'Демо':'Ваши файлы'}</span><span className="track-added">{t.video_id||t.external_id?'Стриминг':t.id===demo.id?'Демо':'Недавно'}</span><span className="track-time">{current.id===t.id&&duration?format(duration):t.duration?format(t.duration):'—'}</span><div className="track-controls">{t.video_id && <button title="Запустить радио по треку" aria-label={`Радио: ${t.title}`} onClick={()=>void startRadio(t)}><Radio size={16}/></button>}<button aria-label="Нравится трек" onClick={()=>void toggleLike(t)} className={likes.includes(t.id)?'liked':''}><Heart size={16} fill={likes.includes(t.id)?'currentColor':'none'}/></button>{playlists.length>0 && <select aria-label="Добавить в плейлист" value="" onChange={e=>void addToPlaylist(t,e.target.value)}><option value="">＋</option>{playlists.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select>}</div></div>) : <div className="empty">Здесь пока нет треков. {view==='liked'?'Отметьте понравившийся трек, чтобы сохранить его здесь.':view.startsWith('playlist:')?'Добавьте треки через меню + в медиатеке.':'Попробуйте другой запрос или загрузите свою музыку.'}</div>}</div></section>
         <footer>СОЗДАНО ДЛЯ МУЗЫКИ <span>✳</span> ОСТАНЬТЕСЬ НЕНАДОЛГО</footer>

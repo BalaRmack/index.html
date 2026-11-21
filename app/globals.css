@@ -37,7 +37,7 @@
   -webkit-mask-composite:xor;mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);mask-composite:exclude;
 }
 @supports (backdrop-filter:url("#liquid-glass-refraction")){
-  .player::before,.search-wrap::after{backdrop-filter:url("#liquid-glass-refraction");-webkit-backdrop-filter:url("#liquid-glass-refraction")}
+  .player,.search-wrap,.profile,.soundcloud-panel,.toast,.modal{backdrop-filter:url("#liquid-glass-refraction") blur(20px) saturate(180%);-webkit-backdrop-filter:url("#liquid-glass-refraction") blur(20px) saturate(180%)}
 }
 .catalog-play,.radio-card,.history button,.profile,.source-tabs button,.source-tabs a{
   border:1px solid rgba(222,255,230,.25);box-shadow:inset 0 1px 0 rgba(255,255,255,.2),inset 1px 0 0 rgba(160,224,255,.08),inset -1px 0 0 rgba(255,180,218,.08);
@@ -57,4 +57,9 @@
   .player-right{display:flex;gap:4px}
   .player-right button:first-child,.player-right span{display:none}
   .player-right input{width:36px;min-width:0}
+}
+.youtube-frame{position:absolute;inset:0}
+
+@media (prefers-reduced-transparency:reduce){
+  .player,.search-wrap,.profile,.soundcloud-panel,.toast,.modal{background-color:rgba(25,34,28,.97);backdrop-filter:none;-webkit-backdrop-filter:none}
 }
