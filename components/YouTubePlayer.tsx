@@ -66,7 +66,7 @@ const YouTubePlayer=forwardRef<Handle,Props>(function YouTubePlayer({volume,onSt
       containers.current.forEach((container,index)=>{
         if(!container)return;
         const host=document.createElement('div');container.replaceChildren(host);
-        const instance=new YTApi.Player(host,{width:'200',height:'200',playerVars:{playsinline:1,controls:1,origin:window.location.origin,autoplay:0},events:{
+        const instance=new YTApi.Player(host,{host:'https://www.youtube-nocookie.com',width:'2',height:'2',playerVars:{playsinline:1,controls:1,origin:window.location.origin,autoplay:0},events:{
           onReady:e=>{if(disposed)return;const slot=slots.current[index];slot.player=e.target;e.target.getIframe?.()?.setAttribute('tabindex','-1');e.target.setVolume(callbacks.current.volume);if(index===active.current && selected.current)e.target.loadVideoById(selected.current);else if(index!==active.current && upcoming.current){slot.cued=upcoming.current;e.target.cueVideoById(upcoming.current);}},
           onStateChange:e=>{
             if(disposed)return;

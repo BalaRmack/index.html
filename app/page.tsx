@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase';
 import YouTubePlayer, { type YouTubePlayerHandle } from '@/components/YouTubePlayer';
 import { fallbackShelves } from '@/lib/fallback-tracks';
 import { advanceListening, shouldRecordSkip } from '@/lib/listening';
+import { guestLikes, saveGuestSignal, setGuestLike, waveHistory } from '@/lib/guest-history';
 import { ArrowLeft, ArrowRight, AudioLines, ChevronDown, Clock3, Heart, Home, Library, ListMusic, LogOut, Music2, Pause, Play, Plus, Radio, Repeat2, Search, Shuffle, SkipBack, SkipForward, Upload, Volume2, VolumeX, X } from 'lucide-react';
 
 type Track = { id:string; title:string; artist:string; storage_path:string|null; owner_id?:string|null; source?:'local'|'youtube'|'deezer'|'jiosaavn'; video_id?:string|null; external_id?:string|null; thumbnail?:string|null; duration?:number };
@@ -46,6 +47,7 @@ export default function HomePage() {
   const [email,setEmail] = useState('');
   const [notice,setNotice] = useState('');
   const [busy,setBusy] = useState(false);
+  const [waveLoading,setWaveLoading] = useState(false);
   const audio = useRef<HTMLAudioElement|null>(null);
   const yt = useRef<YouTubePlayerHandle|null>(null);
   const [youtubeActive,setYoutubeActive] = useState(false);
@@ -59,6 +61,7 @@ export default function HomePage() {
   const playedIds = useRef<string[]>([]);
   const requestSeq = useRef(0);
   const radioRequest = useRef(false);
+  const waveMode = useRef(false);
   const playback = useRef({seconds:0,last:0,completed:false,started:false});
   const listenRecorded = useRef(false);
 
@@ -69,7 +72,7 @@ export default function HomePage() {
     return () => subscription.unsubscribe();
   },[]);
   useEffect(() => {
-    if (!supabase || !user) { setTracks([demo]); setPlaylists([]); setLikes([]); return; }
+    if (!supabase || !user) { const saved=guestLikes();setTracks(unique([...saved,demo])); setPlaylists([]); setLikes(saved.map(t=>t.id)); return; }
     const db = supabase;
     Promise.all([db.from('tracks').select('*').order('created_at',{ascending:false}), db.from('playlists').select('id,name').order('created_at',{ascending:false}), db.from('likes').select('track_id')]).then(([t,p,l]) => {
       if (t.data) setTracks((t.data as Track[]).map(fromDb));
@@ -114,7 +117,7 @@ export default function HomePage() {
 
   async function authHeaders() {const session=await supabase?.auth.getSession();const token=session?.data.session?.access_token;return token?{Authorization:`Bearer ${token}`} : undefined;}
   async function logSignal(track:Track,event_type:'like'|'playlist_add'|'complete'|'skip'|'listen',seconds=0) {
-    if(!user || !supabase) return;
+    if(!user || !supabase) {if(!saveGuestSignal(track,event_type))setNotice('Не удалось сохранить историю в браузере.');return;}
     const {error}=await supabase.from('listening_history').insert({user_id:user.id,track_id:track.id,video_id:track.video_id || null,title:track.title.slice(0,300),artist:track.artist.slice(0,200),event_type,listened_seconds:Math.max(0,Math.floor(seconds))});
     if(error) setNotice('Не удалось сохранить историю прослушивания.');
     else if(event_type!=='skip' && event_type!=='listen') setRefreshShelves(x=>x+1);
@@ -150,7 +153,7 @@ export default function HomePage() {
       }
       if(playback.current.started && currentRef.current.id!==track.id) recordSwitch();
       seq=++requestSeq.current; if(!track.video_id)yt.current?.stop(); audio.current?.pause();setSoundcloudUrl(null);
-      if(list) {queue.current=list;queueIndex.current=Math.max(0,list.findIndex(x=>x.id===track.id));playedIds.current=[];}
+      if(list) {waveMode.current=false;queue.current=list;queueIndex.current=Math.max(0,list.findIndex(x=>x.id===track.id));playedIds.current=[];}
       if(track.video_id && !playedIds.current.includes(track.video_id)) playedIds.current.push(track.video_id);
       playback.current={seconds:0,last:0,completed:false,started:false};listenRecorded.current=false;
       setCurrent(track); currentRef.current=track; setElapsed(0);setDuration(0);setPlaying(false);setLoading(true);
@@ -171,16 +174,31 @@ export default function HomePage() {
     const p=new URLSearchParams({mode:'radio',seed:seed.video_id,artist:seed.artist,seen:playedIds.current.slice(-100).join(',')});
     const r=await fetch(`/api/recommendations?${p}`,{headers});const data=await r.json();if(!r.ok)throw new Error(data.error||'Не удалось загрузить радио.');return data.tracks as Track[];
   }
+  async function moreWave() {
+    const headers=await authHeaders();const body={...waveHistory(),seen:playedIds.current.slice(-100)};
+    const response=await fetch('/api/recommendations?mode=wave',{method:'POST',headers:{...headers,'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const data=await response.json();if(!response.ok)throw new Error(data.error||'Не удалось загрузить волну.');
+    if(!Array.isArray(data.tracks))throw new Error('Некорректный ответ волны.');
+    return data as {tracks:Track[];editorialFallback?:boolean;emptyReason?:string};
+  }
+  async function startWave() {
+    if(waveLoading)return;
+    const seq=++requestSeq.current;setWaveLoading(true);setNotice('Подбираем музыку для волны…');
+    try {const result=await moreWave();if(seq!==requestSeq.current)return;if(!result.tracks.length)throw new Error(result.emptyReason||'Новых треков для волны пока не найдено.');
+      void playTrack(result.tracks[0],result.tracks,true);waveMode.current=true;
+      setNotice(result.editorialFallback?'Популярные источники недоступны: включена перемешанная резервная подборка.':'Моя волна запущена.');
+    } catch(e){if(seq===requestSeq.current)setNotice(e instanceof Error?e.message:'Не удалось запустить волну.');} finally {setWaveLoading(false);}
+  }
   async function skip(direction:number,automatic=false) {
     if(!automatic) recordSwitch();
     const list=queue.current;
-    let next=shuffle && direction>0 && list.length>1 ? Math.floor(Math.random()*(list.length-1)) : queueIndex.current+direction;
-    if(shuffle && direction>0 && list.length>1 && next>=queueIndex.current)next++;
+    let next=shuffle && !waveMode.current && direction>0 && list.length>1 ? Math.floor(Math.random()*(list.length-1)) : queueIndex.current+direction;
+    if(shuffle && !waveMode.current && direction>0 && list.length>1 && next>=queueIndex.current)next++;
     if(next<0) next=0;
     if(next<list.length) {queueIndex.current=next;playback.current.started=false;void playTrack(list[next],undefined,true);return;}
     if(currentRef.current.video_id) {
       if(radioRequest.current) return; radioRequest.current=true; const seq=requestSeq.current; audio.current?.pause();yt.current?.pause();playback.current.started=false;setPlaying(false);setLoading(true);
-      try {const more=await moreRadio(currentRef.current);if(seq!==requestSeq.current)return;if(!more.length){setLoading(false);setPlaying(false);setNotice('Похожие треки не найдены. Попробуйте другое радио.');return;}queue.current=[...list,...more];queueIndex.current=list.length;playback.current.started=false;void playTrack(more[0],undefined,true);}
+      try {const result=waveMode.current?await moreWave():{tracks:await moreRadio(currentRef.current)};const more=result.tracks;if(seq!==requestSeq.current)return;if(!more.length){setLoading(false);setPlaying(false);setNotice('Похожие треки не найдены. Попробуйте другое радио.');return;}queue.current=[...list,...more];queueIndex.current=list.length;playback.current.started=false;void playTrack(more[0],undefined,true);}
       catch(e){if(seq===requestSeq.current){setLoading(false);setPlaying(false);setNotice(e instanceof Error?e.message:'Радио недоступно.');}} finally {radioRequest.current=false;}
     } else {setPlaying(false);setNotice('Очередь закончилась.');}
   }
@@ -220,8 +238,8 @@ export default function HomePage() {
     setTracks(prev=>unique([track,...prev]));return id;
   }
   async function toggleLike(track:Track) {
-    if (!user || !supabase) { setAuthOpen(true); return; }
     const exists=likes.includes(track.id);
+    if (!user || !supabase) {if(!setGuestLike(track,!exists)){setNotice('Не удалось сохранить лайк в браузере.');return;}setLikes(prev=>exists?prev.filter(x=>x!==track.id):[...prev,track.id]);setTracks(prev=>exists?prev:unique([track,...prev]));return;}
     try {const id=await ensureSaved(track);const {error}=exists?await supabase.from('likes').delete().eq('user_id',user.id).eq('track_id',id):await supabase.from('likes').insert({user_id:user.id,track_id:id});if(error)throw error;setLikes(prev=>exists?prev.filter(x=>x!==track.id):[...prev,track.id]);if(!exists)void logSignal(track,'like');}
     catch(e){setNotice(e instanceof Error?e.message:'Не удалось сохранить лайк.');}
   }
@@ -278,13 +296,13 @@ export default function HomePage() {
     <YouTubePlayer ref={yt} volume={volume} onProgress={(time,d)=>{setElapsed(time);setDuration(d);if(advanceListening(playback.current,time,d,true,false))void logSignal(currentRef.current,'complete',playback.current.seconds);recordListen();}} onState={state=>{if(state==='playing'){playback.current.started=true;setPlaying(true);setLoading(false);}else if(state==='paused'){setPlaying(false);setLoading(false);}else {setPlaying(false);if(repeat){playback.current={seconds:0,last:0,completed:false,started:true};listenRecorded.current=false;yt.current?.seek(0);yt.current?.play();}else void skip(1,true);}}} onError={message=>{setLoading(false);setPlaying(false);setNotice(message);}} />
       <div className="content">
         {isHome && <><div className="greeting"><div><h1>Музыка для вас</h1><p>Подборки, радио и ваша медиатека</p></div></div>
-          <section className="hero"><div className="hero-content"><div className="hero-kicker">Радио Nocturne</div><h2>Пусть музыка<br/>продолжится</h2><p>Начните с трека, а радио подберёт похожие</p><div className="hero-actions"><button className="primary" onClick={()=>void startRadio(shelves.similar[0] || shelves.recent[0] || shelves.daily[0] || shelves.trending[0])} disabled={![...shelves.similar,...shelves.recent,...shelves.daily,...shelves.trending].length}><Play size={15} fill="currentColor"/> Моя волна</button><button className="hero-link" onClick={()=>setView('library')}>Открыть медиатеку <ArrowRight size={16}/></button></div></div></section>
+          <section className="hero"><div className="hero-content"><div className="hero-kicker">Радио Nocturne</div><h2>Пусть музыка<br/>продолжится</h2><p>Начните с трека, а радио подберёт похожие</p><div className="hero-actions"><button className="primary" onClick={()=>void startWave()} disabled={waveLoading}><Play size={15} fill="currentColor"/> Моя волна</button><button className="hero-link" onClick={()=>setView('library')}>Открыть медиатеку <ArrowRight size={16}/></button></div></div></section>
           <div className="recommendations"><div className="recommendations-heading"><div><h2>Откройте что-то новое</h2></div><button onClick={()=>setRefreshShelves(x=>x+1)}>Обновить <ArrowRight size={15}/></button></div>{shelfStatus && <p className="catalog-status">{shelfStatus}</p>}
           {shelves.similarUnavailable && <p className="catalog-status">Источники похожей музыки временно недоступны.</p>}<Shelf title="Похоже на ваши лайки" subtitle="На основе понравившихся треков" items={shelves.similar} onPlay={(t,list)=>void playTrack(t,list)} onRadio={t=>void startRadio(t)} />
           <Shelf title="Недавно слушали" subtitle="Треки, к которым хочется вернуться" items={shelves.recent} onPlay={(t,list)=>void playTrack(t,list)} onRadio={t=>void startRadio(t)} />
           <Shelf title="Микс дня" subtitle="По вашим любимым исполнителям" items={shelves.daily} onPlay={(t,list)=>void playTrack(t,list)} onRadio={t=>void startRadio(t)} />
           <Shelf title="В тренде" subtitle={shelves.editorialFallback?"Резервная редакционная подборка — не персональные рекомендации":shelves.trendingFallback?"Популярные поисковые запросы — тренды зеркал недоступны":"Российские и мировые подборки зеркал"} items={shelves.trending} onPlay={(t,list)=>void playTrack(t,list)} onRadio={t=>void startRadio(t)} />
-          {!user && <p className="catalog-status">Войдите, чтобы сохранять историю и получать персональные подборки.</p>}</div></>}
+          {!user && <p className="catalog-status">История и лайки сохраняются в этом браузере. Войдите, чтобы пользоваться библиотекой на других устройствах.</p>}</div></>}
         <section className="section tracks-section"><div className="section-heading"><div><h2>{title}</h2><p>{search?'Поиск по вашей библиотеке и публичным каталогам.':isHome?'Ваши сохранённые треки.':'Ваша личная коллекция.'}</p></div>{isHome && <button onClick={()=>setView('library')}>Показать все <ArrowRight size={15}/></button>}</div><div className="track-head"><span>#</span><span>Название</span><span>Источник</span><span>Добавлено</span><span><Clock3 size={15}/></span><span/></div>{search && <div className="source-tabs" aria-label="Источник поиска">{([['youtube','YouTube'],['deezer','Deezer · превью'],['jiosaavn','JioSaavn']] as const).map(([id,label])=><button key={id} className={searchSource===id?'selected':''} onClick={()=>setSearchSource(id)}>{label}</button>)}<a href={`https://soundcloud.com/search/sounds?q=${encodeURIComponent(search)}`} target="_blank" rel="noreferrer">SoundCloud ↗</a><button onClick={openSoundcloud}>Вставить ссылку SoundCloud</button></div>}<div className="track-list">{search && searchStatus && <div className="catalog-status">{searchStatus}</div>}{visible.length ? visible.map((t,i)=><div className={`track-row ${current.id===t.id&&playing?'is-playing':''}`} key={t.id}><button className="track-number" onClick={()=>void playTrack(t,visible)}>{current.id===t.id&&playing?<AudioLines size={16}/>:<><span>{String(i+1).padStart(2,'0')}</span><Play className="row-play" size={15} fill="currentColor"/></>}</button><button className="track-title" onClick={()=>void playTrack(t,visible)}><span className="track-art" style={{backgroundImage:`url('${imageFor(t)}')`}}/><span><b>{t.title}</b><small>{displayArtist(t.artist)}</small></span></button><span className="track-album">{t.video_id?'YouTube':t.source==='deezer'?'Deezer · 30 сек.':t.source==='jiosaavn'?'JioSaavn':t.id===demo.id?'Демо':'Ваши файлы'}</span><span className="track-added">{t.video_id||t.external_id?'Стриминг':t.id===demo.id?'Демо':'Недавно'}</span><span className="track-time">{current.id===t.id&&duration?format(duration):t.duration?format(t.duration):'—'}</span><div className="track-controls">{t.video_id && <button title="Запустить радио по треку" aria-label={`Радио: ${t.title}`} onClick={()=>void startRadio(t)}><Radio size={16}/></button>}<button aria-label="Нравится трек" onClick={()=>void toggleLike(t)} className={likes.includes(t.id)?'liked':''}><Heart size={16} fill={likes.includes(t.id)?'currentColor':'none'}/></button>{playlists.length>0 && <select aria-label="Добавить в плейлист" value="" onChange={e=>void addToPlaylist(t,e.target.value)}><option value="">＋</option>{playlists.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select>}</div></div>) : <div className="empty">Здесь пока нет треков. {view==='liked'?'Отметьте понравившийся трек, чтобы сохранить его здесь.':view.startsWith('playlist:')?'Добавьте треки через меню + в медиатеке.':'Попробуйте другой запрос или загрузите свою музыку.'}</div>}</div></section>
         <footer>Nocturne</footer>
       </div>
@@ -294,7 +312,7 @@ export default function HomePage() {
     {/* Local audio events. */}
     <AudioEvents audio={audio} playing={playing} trackId={current.id} onTime={onTime} onDuration={setDuration} onEnded={()=>{setPlaying(false);if(repeat && audio.current){playback.current={seconds:0,last:0,completed:false,started:true};listenRecorded.current=false;audio.current.currentTime=0;void audio.current.play().then(()=>setPlaying(true)).catch(()=>setNotice('Ошибка воспроизведения.'));}else void skip(1,true)}} onError={()=>{if(!currentRef.current.video_id){setPlaying(false);setNotice('Не удалось загрузить аудио.');}}} />
     {notice && <div className="toast" role="status">{notice}<button aria-label="Закрыть уведомление" onClick={()=>setNotice('')}><X size={16}/></button></div>}
-    {authOpen && <div className="modal-backdrop" onClick={()=>setAuthOpen(false)}><div className="modal" onClick={e=>e.stopPropagation()}><button className="modal-close" aria-label="Закрыть" onClick={()=>setAuthOpen(false)}><X size={19}/></button><span className="brand-icon"><AudioLines size={22}/></span><h2>Ваша музыка всегда с вами</h2><p>Войдите, чтобы сохранять любимые треки, создавать плейлисты и загружать музыку.</p><form onSubmit={signIn}><label htmlFor="email">Электронная почта</label><input id="email" type="email" placeholder="you@example.com" value={email} onChange={e=>setEmail(e.target.value)} required/><button className="primary" disabled={busy}>{busy?'Отправляем…':'Получить ссылку для входа'} <ArrowRight size={16}/></button></form><small>Пароль не нужен — отправим ссылку для входа на почту.</small></div></div>}
+    {authOpen && <div className="modal-backdrop" onClick={()=>setAuthOpen(false)}><div className="modal" onClick={e=>e.stopPropagation()}><button className="modal-close" aria-label="Закрыть" onClick={()=>setAuthOpen(false)}><X size={19}/></button><span className="brand-icon"><AudioLines size={22}/></span><h2>Ваша музыка всегда с вами</h2><p>Войдите, чтобы синхронизировать библиотеку, создавать плейлисты и загружать музыку.</p><form onSubmit={signIn}><label htmlFor="email">Электронная почта</label><input id="email" type="email" placeholder="you@example.com" value={email} onChange={e=>setEmail(e.target.value)} required/><button className="primary" disabled={busy}>{busy?'Отправляем…':'Получить ссылку для входа'} <ArrowRight size={16}/></button></form><small>Пароль не нужен — отправим ссылку для входа на почту.</small></div></div>}
   </div>;
 }
 

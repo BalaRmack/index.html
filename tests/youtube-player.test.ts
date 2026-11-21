@@ -11,6 +11,7 @@ test('two persistent iframes cue and swap safely, cancel queued playback and ign
   type Fake={id:string;events:YT.Events;iframe:HTMLIFrameElement;setVolume:(v:number)=>void;loadVideoById:(id:string)=>void;cueVideoById:(id:string)=>void;pauseVideo:()=>void;playVideo:()=>void;seekTo:()=>void;getPlayerState:()=>number;getVideoData:()=>{video_id:string};getIframe:()=>HTMLIFrameElement;getCurrentTime:()=>number;getDuration:()=>number;destroy:()=>void};
   const players:Fake[]=[];const ops:string[]=[];const states:string[]=[];
   (dom.window as unknown as {YT:unknown}).YT={PlayerState:{PLAYING:1,PAUSED:2,ENDED:0},Player:function(host:HTMLElement,opts:YT.PlayerOptions){
+    assert.equal(opts.host,'https://www.youtube-nocookie.com');assert.equal(opts.width,'2');assert.equal(opts.height,'2');
     const index=players.length;const iframe=dom.window.document.createElement('iframe');host.replaceWith(iframe);
     const p:Fake={id:'',events:opts.events!,iframe,setVolume:()=>{},loadVideoById:id=>{p.id=id;ops.push(`load${index}:${id}`)},cueVideoById:id=>{p.id=id;ops.push(`cue${index}:${id}`)},pauseVideo:()=>ops.push(`pause${index}`),playVideo:()=>ops.push(`play${index}`),seekTo:()=>{},getPlayerState:()=>2,getVideoData:()=>({video_id:p.id}),getIframe:()=>iframe,getCurrentTime:()=>0,getDuration:()=>0,destroy:()=>{ops.push(`destroy${index}`);iframe.remove()}};
     players.push(p);return p;
