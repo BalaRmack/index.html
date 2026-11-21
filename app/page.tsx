@@ -54,7 +54,6 @@ export default function HomePage() {
   const audio = useRef<HTMLAudioElement|null>(null);
   const yt = useRef<YouTubePlayerHandle|null>(null);
   const [youtubeActive,setYoutubeActive] = useState(false);
-  const [youtubeInstance,setYoutubeInstance] = useState(0);
   const ctx = useRef<AudioContext|null>(null);
   const gain = useRef<GainNode|null>(null);
   const fileInput = useRef<HTMLInputElement|null>(null);
@@ -144,12 +143,12 @@ export default function HomePage() {
         if(audio.current!.paused) {if(ctx.current && !track.video_id) await ctx.current.resume();await audio.current!.play();playback.current.started=true;setPlaying(true);} else {audio.current!.pause();setPlaying(false);} return;
       }
       if(playback.current.started && currentRef.current.id!==track.id) recordSwitch();
-      seq=++requestSeq.current; yt.current?.pause(); audio.current?.pause();setSoundcloudUrl(null);
+      seq=++requestSeq.current; if(!track.video_id)yt.current?.stop(); audio.current?.pause();setSoundcloudUrl(null);
       if(list) {queue.current=list;queueIndex.current=Math.max(0,list.findIndex(x=>x.id===track.id));playedIds.current=[];}
       if(track.video_id && !playedIds.current.includes(track.video_id)) playedIds.current.push(track.video_id);
       playback.current={seconds:0,last:0,completed:false,started:false};
       setCurrent(track); currentRef.current=track; setElapsed(0);setDuration(0);setPlaying(false);setLoading(true);
-      if(track.video_id) { setYoutubeActive(true);setYoutubeInstance(n=>n+1);return; }
+      if(track.video_id) { setYoutubeActive(true);yt.current?.load(track.video_id);return; }
       setYoutubeActive(false);
       const remote=Boolean(track.external_id);const player=initAudio(remote);player.pause();player.removeAttribute('src');player.load();
       {
@@ -179,6 +178,27 @@ export default function HomePage() {
       catch(e){if(seq===requestSeq.current){setLoading(false);setPlaying(false);setNotice(e instanceof Error?e.message:'Радио недоступно.');}} finally {radioRequest.current=false;}
     } else {setPlaying(false);setNotice('Очередь закончилась.');}
   }
+  const mediaActions = useRef({play:()=>{},pause:()=>{},nexttrack:()=>{},previoustrack:()=>{}});
+  mediaActions.current={
+    play:()=>{if(soundcloudUrl)return;if(currentRef.current.video_id && youtubeActive)yt.current?.play();else if(!playing)void playTrack(currentRef.current);},
+    pause:()=>{if(soundcloudUrl)return;if(currentRef.current.video_id && youtubeActive)yt.current?.pause();else {audio.current?.pause();setPlaying(false);}},
+    nexttrack:()=>{if(!soundcloudUrl)void skip(1);},
+    previoustrack:()=>{if(!soundcloudUrl)void skip(-1);},
+  };
+  useEffect(()=>{
+    if(!('mediaSession' in navigator))return;
+    const session=navigator.mediaSession;
+    const actions=['play','pause','nexttrack','previoustrack'] as const;
+    for(const action of actions) {try {session.setActionHandler(action,()=>mediaActions.current[action]());} catch { /* Not every browser supports every action. */ }}
+    return ()=>{for(const action of actions)try {session.setActionHandler(action,null);} catch {} session.metadata=null;try {session.playbackState='none';} catch {}};
+  },[]);
+  useEffect(()=>{
+    if(!('mediaSession' in navigator))return;
+    const session=navigator.mediaSession;
+    if(soundcloudUrl){session.metadata=null;try {session.playbackState='none';} catch {} return;}
+    if(typeof MediaMetadata!=='undefined')session.metadata=new MediaMetadata({title:current.title,artist:current.artist,artwork:[{src:imageFor(current)}]});
+    try {session.playbackState=playing?'playing':'paused';} catch {}
+  },[current,playing,soundcloudUrl]);
   async function startRadio(track:Track) {
     if(!track?.video_id){setNotice('Радио доступно для треков из каталога.');return;}
     // The seed starts immediately; its related tracks are fetched when the queue ends.
@@ -230,7 +250,7 @@ export default function HomePage() {
   function openSoundcloud() {
     const input=window.prompt('Вставьте ссылку на публичный трек SoundCloud');if(!input)return;
     try {const u=new URL(input);if(u.protocol!=='https:'||!['soundcloud.com','www.soundcloud.com'].includes(u.hostname)||u.username||u.password||u.pathname.split('/').filter(Boolean).length<2)throw new Error();
-      if(playback.current.started)recordSwitch();++requestSeq.current;yt.current?.pause();audio.current?.pause();setYoutubeActive(false);setPlaying(false);setLoading(false);setSoundcloudUrl(`https://soundcloud.com${u.pathname}`);
+      if(playback.current.started)recordSwitch();++requestSeq.current;yt.current?.stop();audio.current?.pause();setYoutubeActive(false);setPlaying(false);setLoading(false);setSoundcloudUrl(`https://soundcloud.com${u.pathname}`);
     } catch {setNotice('Нужна ссылка https://soundcloud.com/исполнитель/трек');}
   }
   const localVisible=tracks.filter(t => (view === 'liked' ? likes.includes(t.id) : view.startsWith('playlist:') ? playlistIds.includes(t.id) : true) && `${t.title} ${t.artist}`.toLowerCase().includes(search.toLowerCase()));
@@ -264,7 +284,7 @@ export default function HomePage() {
     </main>
     <div className="player"><div className="now-playing"><div className="player-art" style={{backgroundImage:`url('${imageFor(current)}')`}}/><div><b>{current.title}</b><small>{current.artist}</small></div><button className={likes.includes(current.id)?'liked':''} onClick={()=>void toggleLike(current)} aria-label="Like current track"><Heart size={17} fill={likes.includes(current.id)?'currentColor':'none'}/></button></div><div className="player-center"><div className="player-buttons"><button className={shuffle?'on':''} onClick={()=>setShuffle(!shuffle)} aria-label="Shuffle"><Shuffle size={16}/></button><button onClick={()=>void skip(-1)} aria-label="Previous"><SkipBack size={18} fill="currentColor"/></button><button className="play-main" onClick={()=>void playTrack(current)} aria-label={playing?'Pause':'Play'}>{loading?<AudioLines size={19}/>:playing?<Pause size={19} fill="currentColor"/>:<Play size={19} fill="currentColor"/>}</button><button onClick={()=>void skip(1)} aria-label="Next"><SkipForward size={18} fill="currentColor"/></button><button className={repeat?'on':''} onClick={()=>setRepeat(!repeat)} aria-label="Repeat"><Repeat2 size={17}/></button></div><div className="progress"><span>{format(elapsed)}</span><input aria-label="Seek" type="range" min="0" max={duration||0} value={Math.min(elapsed,duration||0)} onChange={e=>{if(current.video_id && youtubeActive)yt.current?.seek(Number(e.target.value));else if(audio.current) audio.current.currentTime=Number(e.target.value);playback.current.last=Number(e.target.value);setElapsed(Number(e.target.value))}} style={{'--progress':`${duration?elapsed/duration*100:0}%`} as React.CSSProperties}/><span>{format(duration)}</span></div></div><div className="player-right"><button title="Library" onClick={()=>setView('library')}><ListMusic size={18}/></button><button onClick={()=>setVolume(volume?0:70)} aria-label="Mute">{volume?<Volume2 size={18}/>:<VolumeX size={18}/>}</button><input aria-label="Volume" type="range" min="0" max="100" value={volume} onChange={e=>setVolume(Number(e.target.value))} style={{'--progress':`${volume}%`} as React.CSSProperties}/><span>{volume}%</span></div></div>
     {soundcloudUrl && <aside className="soundcloud-panel"><div className="youtube-header"><span>SOUNDCLOUD · ВИДЖЕТ</span><button onClick={()=>setSoundcloudUrl(null)} aria-label="Закрыть SoundCloud">×</button></div><iframe title="SoundCloud player" width="100%" height="166" allow="autoplay" src={`https://w.soundcloud.com/player/?url=${encodeURIComponent(soundcloudUrl)}&auto_play=false`} /><small>Управляйте воспроизведением в виджете SoundCloud.</small></aside>}
-    {youtubeActive && current.video_id && <YouTubePlayer key={`${current.video_id}:${youtubeInstance}`} ref={yt} videoId={current.video_id} volume={volume} onFindAlternative={()=>{setSearch(`${current.artist} ${current.title}`);setSearchSource('deezer');setView('library');}} onClose={()=>{yt.current?.pause();setYoutubeActive(false);setPlaying(false);setLoading(false);}} onProgress={(time,d)=>{setElapsed(time);setDuration(d);if(advanceListening(playback.current,time,d,true,false))void logSignal(currentRef.current,'complete',playback.current.seconds);}} onState={state=>{if(state==='playing'){playback.current.started=true;setPlaying(true);setLoading(false);}else if(state==='paused'){setPlaying(false);setLoading(false);}else {setPlaying(false);if(repeat){playback.current={seconds:0,last:0,completed:false,started:true};yt.current?.seek(0);yt.current?.play();}else void skip(1,true);}}} onError={message=>{setLoading(false);setPlaying(false);setNotice(message);}} />}
+    <YouTubePlayer ref={yt} active={youtubeActive} videoId={current.video_id||null} volume={volume} onFindAlternative={()=>{setSearch(`${current.artist} ${current.title}`);setSearchSource('deezer');setView('library');}} onClose={()=>{yt.current?.stop();setYoutubeActive(false);setPlaying(false);setLoading(false);}} onProgress={(time,d)=>{setElapsed(time);setDuration(d);if(advanceListening(playback.current,time,d,true,false))void logSignal(currentRef.current,'complete',playback.current.seconds);}} onState={state=>{if(state==='playing'){playback.current.started=true;setPlaying(true);setLoading(false);}else if(state==='paused'){setPlaying(false);setLoading(false);}else {setPlaying(false);if(repeat){playback.current={seconds:0,last:0,completed:false,started:true};yt.current?.seek(0);yt.current?.play();}else void skip(1,true);}}} onError={message=>{setLoading(false);setPlaying(false);setNotice(message);}} />
     {/* Local audio events. */}
     <AudioEvents audio={audio} playing={playing} trackId={current.id} onTime={onTime} onDuration={setDuration} onEnded={()=>{setPlaying(false);if(repeat && audio.current){playback.current={seconds:0,last:0,completed:false,started:true};audio.current.currentTime=0;void audio.current.play().then(()=>setPlaying(true)).catch(()=>setNotice('Ошибка воспроизведения.'));}else void skip(1,true)}} onError={()=>{if(!currentRef.current.video_id){setPlaying(false);setNotice('Не удалось загрузить аудио.');}}} />
     {notice && <div className="toast" role="status">{notice}<button onClick={()=>setNotice('')}><X size={16}/></button></div>}

@@ -1,0 +1,33 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {JSDOM} from 'jsdom';
+import React, {act, createRef} from 'react';
+import {createRoot} from 'react-dom/client';
+import YouTubePlayer, {type YouTubePlayerHandle} from '../components/YouTubePlayer';
+
+test('reuses one iframe, queues latest track, ignores background visibility and cancels pending playback', async()=>{
+  const dom=new JSDOM('<!doctype html><div id="root"></div>',{url:'https://example.com/'});
+  Object.assign(globalThis,{window:dom.window,document:dom.window.document,IS_REACT_ACT_ENVIRONMENT:true});
+  let constructorCount=0,destroyCount=0,pauseCount=0;
+  let events:YT.Events;
+  let iframe:HTMLIFrameElement;
+  const loaded:string[]=[];
+  const fake={setVolume:()=>{},loadVideoById:(id:string)=>loaded.push(id),pauseVideo:()=>{pauseCount++},playVideo:()=>{},seekTo:()=>{},getPlayerState:()=>2,getVideoData:()=>({video_id:loaded.at(-1)}),getCurrentTime:()=>0,getDuration:()=>0,destroy:()=>{destroyCount++;iframe.remove()}};
+  (dom.window as unknown as {YT:unknown}).YT={PlayerState:{PLAYING:1,PAUSED:2,ENDED:0},Player:function(host:HTMLElement,opts:YT.PlayerOptions){constructorCount++;events=opts.events!;iframe=dom.window.document.createElement('iframe');host.replaceWith(iframe);return fake}};
+  const ref=createRef<YouTubePlayerHandle>();const states:string[]=[];
+  const props={active:false,videoId:null as string|null,volume:70,onState:(s:string)=>states.push(s),onProgress:()=>{},onError:()=>{},onClose:()=>{},onFindAlternative:()=>{}};
+  const root=createRoot(dom.window.document.getElementById('root')!);
+  await act(async()=>{root.render(React.createElement(YouTubePlayer,{...props,ref}));});
+  assert.equal(constructorCount,1);const first=dom.window.document.querySelector('iframe');assert.ok(first);
+  await act(async()=>{ref.current!.load('firstVideo1');ref.current!.load('secondVid22');});
+  assert.deepEqual(loaded,[]);
+  await act(async()=>{events.onReady!({target:fake as unknown as YT.Player});});
+  assert.deepEqual(loaded,['secondVid22']);
+  await act(async()=>{root.render(React.createElement(YouTubePlayer,{...props,active:true,videoId:'secondVid22',ref}));ref.current!.load('thirdVideo3');});
+  assert.equal(constructorCount,1);assert.equal(dom.window.document.querySelector('iframe'),first);assert.deepEqual(loaded,['secondVid22','thirdVideo3']);
+  await act(async()=>{Object.defineProperty(dom.window.document,'hidden',{value:true,configurable:true});dom.window.document.dispatchEvent(new dom.window.Event('visibilitychange'));dom.window.dispatchEvent(new dom.window.Event('blur'));});
+  assert.equal(pauseCount,0);
+  await act(async()=>{ref.current!.stop();events.onStateChange!({target:fake as unknown as YT.Player,data:1});});
+  assert.equal(pauseCount,1);assert.deepEqual(states,[]);
+  await act(async()=>root.unmount());assert.equal(destroyCount,1);dom.window.close();
+});
