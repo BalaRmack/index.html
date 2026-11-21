@@ -3,10 +3,11 @@
 import { useEffect, useRef, useState } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
+import YouTubePlayer, { type YouTubePlayerHandle } from '@/components/YouTubePlayer';
 import { advanceListening, shouldRecordSkip } from '@/lib/listening';
 import { ArrowLeft, ArrowRight, AudioLines, ChevronDown, Clock3, Heart, Home, Library, ListMusic, LogOut, Music2, Pause, Play, Plus, Radio, Repeat2, Search, Shuffle, SkipBack, SkipForward, Sparkles, Upload, Volume2, VolumeX, X } from 'lucide-react';
 
-type Track = { id:string; title:string; artist:string; storage_path:string|null; owner_id?:string|null; source?:'local'|'youtube'; video_id?:string|null; thumbnail?:string|null; duration?:number };
+type Track = { id:string; title:string; artist:string; storage_path:string|null; owner_id?:string|null; source?:'local'|'youtube'|'deezer'|'jiosaavn'; video_id?:string|null; external_id?:string|null; thumbnail?:string|null; duration?:number };
 type Playlist = { id:string; name:string };
 type Shelves = {similar:Track[];recent:Track[];daily:Track[];trending:Track[];trendingFallback?:boolean};
 const demo: Track = { id:'demo-outfoxing', title:'Outfoxing the Fox', artist:'Kevin MacLeod', storage_path:null };
@@ -18,9 +19,9 @@ const covers = [
   'https://images.unsplash.com/photo-1519681393784-d120267933ba?w=500&q=80',
 ];
 const format = (s:number) => `${Math.floor((s || 0)/60)}:${String(Math.floor((s || 0)%60)).padStart(2,'0')}`;
-const canonical = (id:string) => /^yt:[A-Za-z0-9_-]{11}:/.test(id) ? id.slice(0,14) : id;
-const imageFor = (t:Track) => t.video_id ? `https://i.ytimg.com/vi/${t.video_id}/mqdefault.jpg` : t.id===demo.id ? covers[0] : covers[2];
-const fromDb = (t:Track):Track => t.video_id ? {...t,id:`yt:${t.video_id}`,thumbnail:`https://i.ytimg.com/vi/${t.video_id}/mqdefault.jpg`} : t;
+const canonical = (id:string) => /^(yt|dz|js):[A-Za-z0-9_-]+:/.test(id) ? id.split(':').slice(0,2).join(':') : id;
+const imageFor = (t:Track) => t.video_id ? `https://i.ytimg.com/vi/${t.video_id}/mqdefault.jpg` : t.thumbnail || (t.id===demo.id ? covers[0] : covers[2]);
+const fromDb = (t:Track):Track => t.video_id ? {...t,id:`yt:${t.video_id}`,thumbnail:`https://i.ytimg.com/vi/${t.video_id}/mqdefault.jpg`} : t.external_id ? {...t,id:`${t.source==='deezer'?'dz':'js'}:${t.external_id}`} : t;
 const unique = (ts:Track[]) => {const seen=new Set<string>();return ts.filter(t=>!seen.has(t.id)&&!!seen.add(t.id))};
 
 export default function HomePage() {
@@ -31,6 +32,8 @@ export default function HomePage() {
   const [playlistIds,setPlaylistIds] = useState<string[]>([]);
   const [view,setView] = useState('home');
   const [search,setSearch] = useState('');
+  const [searchSource,setSearchSource] = useState<'youtube'|'deezer'|'jiosaavn'>('youtube');
+  const [soundcloudUrl,setSoundcloudUrl] = useState<string|null>(null);
   const [results,setResults] = useState<Track[]>([]);
   const [searchStatus,setSearchStatus] = useState('');
   const [shelves,setShelves] = useState<Shelves>({similar:[],recent:[],daily:[],trending:[]});
@@ -49,6 +52,9 @@ export default function HomePage() {
   const [notice,setNotice] = useState('');
   const [busy,setBusy] = useState(false);
   const audio = useRef<HTMLAudioElement|null>(null);
+  const yt = useRef<YouTubePlayerHandle|null>(null);
+  const [youtubeActive,setYoutubeActive] = useState(false);
+  const [youtubeInstance,setYoutubeInstance] = useState(0);
   const ctx = useRef<AudioContext|null>(null);
   const gain = useRef<GainNode|null>(null);
   const fileInput = useRef<HTMLInputElement|null>(null);
@@ -58,8 +64,6 @@ export default function HomePage() {
   const queueIndex = useRef(0);
   const playedIds = useRef<string[]>([]);
   const requestSeq = useRef(0);
-  const excludedMirrors = useRef<string[]>([]);
-  const retrying = useRef<number|null>(null);
   const radioRequest = useRef(false);
   const playback = useRef({seconds:0,last:0,completed:false,started:false});
 
@@ -86,9 +90,10 @@ export default function HomePage() {
   useEffect(() => {
     const query=search.trim(); if(query.length<2) {setResults([]);setSearchStatus(query?'Введите минимум 2 символа.':'');return;}
     const controller=new AbortController(); setSearchStatus('Ищем в каталоге…');
-    const timer=setTimeout(()=>{void fetch(`/api/catalog/search?q=${encodeURIComponent(query)}`,{signal:controller.signal}).then(async r=>{const d=await r.json();if(!r.ok)throw new Error(d.error);setResults(d.tracks);setSearchStatus(d.tracks.length?'':'Ничего не найдено.');}).catch(e=>{if(e.name!=='AbortError'){setResults([]);setSearchStatus('Каталог временно недоступен.')}})},400);
+    const path=searchSource==='youtube'?`/api/catalog/search?q=${encodeURIComponent(query)}`:`/api/catalog/alternative/search?source=${searchSource}&q=${encodeURIComponent(query)}`;
+    const timer=setTimeout(()=>{void fetch(path,{signal:controller.signal}).then(async r=>{const d=await r.json();if(!r.ok)throw new Error(d.error);setResults(d.tracks);setSearchStatus(d.tracks.length?'':'Ничего не найдено.');}).catch(e=>{if(e.name!=='AbortError'){setResults([]);setSearchStatus('Каталог временно недоступен.')}})},400);
     return ()=>{clearTimeout(timer);controller.abort()};
-  },[search]);
+  },[search,searchSource]);
   useEffect(() => { setShelves({similar:[],recent:[],daily:[],trending:[]}); },[user?.id]);
   useEffect(() => {
     const controller=new AbortController();
@@ -100,7 +105,7 @@ export default function HomePage() {
     }
     void load(); return ()=>controller.abort();
   },[user,refreshShelves]);
-  useEffect(() => { if(gain.current) gain.current.gain.value = volume/100; if(audio.current && currentRef.current.video_id) audio.current.volume=volume/100; },[volume]);
+  useEffect(() => { if(gain.current) gain.current.gain.value = volume/100; if(audio.current?.dataset.remote) audio.current.volume=volume/100; yt.current?.volume(volume); },[volume]);
   useEffect(() => () => { ++requestSeq.current; audio.current?.pause(); void ctx.current?.close(); },[]);
 
   async function authHeaders() {const session=await supabase?.auth.getSession();const token=session?.data.session?.access_token;return token?{Authorization:`Bearer ${token}`} : undefined;}
@@ -130,49 +135,30 @@ export default function HomePage() {
     }
     audio.current=player; return player;
   }
-  async function resolveAndPlay(track:Track,seq:number) {
-    if(retrying.current===seq) return;
-    retrying.current=seq;
-    try {
-      let lastError='Не удалось запустить трек.';
-      while(seq===requestSeq.current && excludedMirrors.current.length<6) {
-        const response=await fetch(`/api/catalog/stream?id=${track.video_id}&exclude=${encodeURIComponent(excludedMirrors.current.join(','))}`);
-        const data=await response.json(); if(!response.ok) throw new Error(data.error || lastError);
-        if(seq!==requestSeq.current) return;
-        excludedMirrors.current.push(data.mirror);
-        const player=audio.current!; player.src=data.url;
-        try {await player.play(); if(seq!==requestSeq.current) return; playback.current.started=true;setPlaying(true);setLoading(false);return;}
-        catch(e) {if((e as Error).name==='NotAllowedError') throw new Error('Браузер заблокировал воспроизведение. Нажмите Play ещё раз.');lastError='Поток недоступен, пробуем другое зеркало…';}
-      }
-      throw new Error(lastError);
-    } finally { if(retrying.current===seq) retrying.current=null; }
-  }
   async function playTrack(track:Track,list?:Track[],force=false) {
     let seq=requestSeq.current;
     try {
-      const same=currentRef.current.id===track.id && audio.current?.src;
+      if(track.video_id && currentRef.current.id===track.id && youtubeActive && !force && !soundcloudUrl) {if(playing)yt.current?.pause();else yt.current?.play();return;}
+      const same=!soundcloudUrl && !track.video_id && currentRef.current.id===track.id && audio.current?.src;
       if(same && !force && !loading) {
         if(audio.current!.paused) {if(ctx.current && !track.video_id) await ctx.current.resume();await audio.current!.play();playback.current.started=true;setPlaying(true);} else {audio.current!.pause();setPlaying(false);} return;
       }
       if(playback.current.started && currentRef.current.id!==track.id) recordSwitch();
-      seq=++requestSeq.current; retrying.current=null;
+      seq=++requestSeq.current; yt.current?.pause(); audio.current?.pause();setSoundcloudUrl(null);
       if(list) {queue.current=list;queueIndex.current=Math.max(0,list.findIndex(x=>x.id===track.id));playedIds.current=[];}
       if(track.video_id && !playedIds.current.includes(track.video_id)) playedIds.current.push(track.video_id);
-      excludedMirrors.current=[]; playback.current={seconds:0,last:0,completed:false,started:false};
+      playback.current={seconds:0,last:0,completed:false,started:false};
       setCurrent(track); currentRef.current=track; setElapsed(0);setDuration(0);setPlaying(false);setLoading(true);
-      const player=initAudio(Boolean(track.video_id));player.pause();player.removeAttribute('src');player.load();
-      if(track.video_id) await resolveAndPlay(track,seq);
-      else {
+      if(track.video_id) { setYoutubeActive(true);setYoutubeInstance(n=>n+1);return; }
+      setYoutubeActive(false);
+      const remote=Boolean(track.external_id);const player=initAudio(remote);player.pause();player.removeAttribute('src');player.load();
+      {
         let url='/audio/outfoxing.mp3';
+        if(track.external_id && (track.source==='deezer'||track.source==='jiosaavn')) {const response=await fetch(`/api/catalog/alternative/stream?source=${track.source}&id=${encodeURIComponent(track.external_id)}`);const data=await response.json();if(!response.ok)throw new Error(data.error || 'Аудио недоступно.');url=data.url;}
         if(track.storage_path) {if(!supabase) throw new Error('Supabase не настроен.');const {data,error}=await supabase.storage.from('audio').createSignedUrl(track.storage_path,3600);if(error||!data)throw new Error(error?.message || 'Не удалось открыть трек.');url=data.signedUrl;}
-        if(seq!==requestSeq.current)return;player.src=url;await ctx.current?.resume();await player.play();if(seq!==requestSeq.current)return;playback.current.started=true;setPlaying(true);setLoading(false);
+        if(seq!==requestSeq.current)return;player.src=url;if(!remote)await ctx.current?.resume();await player.play();if(seq!==requestSeq.current)return;playback.current.started=true;setPlaying(true);setLoading(false);
       }
     } catch(e) {if(seq===requestSeq.current){audio.current?.removeAttribute('src');setPlaying(false);setLoading(false);setNotice(e instanceof Error ? e.message : 'Ошибка воспроизведения.');}}
-  }
-  async function retryStream() {
-    if(!currentRef.current.video_id || retrying.current!==null || !playback.current.started) return;
-    setLoading(true);setPlaying(false);
-    try {await resolveAndPlay(currentRef.current,requestSeq.current);} catch(e) {audio.current?.removeAttribute('src');setLoading(false);setNotice(e instanceof Error?e.message:'Нет доступных потоков.');}
   }
   async function moreRadio(seed:Track) {
     if(!seed.video_id) {setNotice('Радио доступно для треков из каталога.');return [];}
@@ -188,7 +174,7 @@ export default function HomePage() {
     if(next<0) next=0;
     if(next<list.length) {queueIndex.current=next;playback.current.started=false;void playTrack(list[next],undefined,true);return;}
     if(currentRef.current.video_id) {
-      if(radioRequest.current) return; radioRequest.current=true; const seq=requestSeq.current; audio.current?.pause();playback.current.started=false;setPlaying(false);setLoading(true);
+      if(radioRequest.current) return; radioRequest.current=true; const seq=requestSeq.current; audio.current?.pause();yt.current?.pause();playback.current.started=false;setPlaying(false);setLoading(true);
       try {const more=await moreRadio(currentRef.current);if(seq!==requestSeq.current)return;if(!more.length){setLoading(false);setPlaying(false);setNotice('Похожие треки не найдены. Попробуйте другое радио.');return;}queue.current=[...list,...more];queueIndex.current=list.length;playback.current.started=false;void playTrack(more[0],undefined,true);}
       catch(e){if(seq===requestSeq.current){setLoading(false);setPlaying(false);setNotice(e instanceof Error?e.message:'Радио недоступно.');}} finally {radioRequest.current=false;}
     } else {setPlaying(false);setNotice('Очередь закончилась.');}
@@ -200,9 +186,10 @@ export default function HomePage() {
   }
   async function ensureSaved(track:Track) {
     if(!user || !supabase) throw new Error('Войдите, чтобы сохранить трек.');
-    if(!track.video_id) return track.id;
-    const id=`yt:${track.video_id}:${user.id}`;
-    const {error}=await supabase.from('tracks').upsert({id,owner_id:user.id,title:track.title.slice(0,300),artist:track.artist.slice(0,200),storage_path:null,source:'youtube',video_id:track.video_id},{onConflict:'id'});
+    if(!track.video_id && !track.external_id) return track.id;
+    const prefix=track.video_id?'yt':track.source==='deezer'?'dz':'js';
+    const id=`${prefix}:${track.video_id || track.external_id}:${user.id}`;
+    const {error}=await supabase.from('tracks').upsert({id,owner_id:user.id,title:track.title.slice(0,300),artist:track.artist.slice(0,200),storage_path:null,source:track.video_id?'youtube':track.source,video_id:track.video_id||null,external_id:track.external_id||null},{onConflict:'id'});
     if(error) throw error;
     setTracks(prev=>unique([track,...prev]));return id;
   }
@@ -240,6 +227,12 @@ export default function HomePage() {
     setBusy(true); const {error} = await supabase.auth.signInWithOtp({email,options:{emailRedirectTo:window.location.origin}}); setBusy(false);
     if(error) setNotice(error.message); else {setAuthOpen(false);setNotice('Проверьте почту: мы отправили ссылку для входа.');}
   }
+  function openSoundcloud() {
+    const input=window.prompt('Вставьте ссылку на публичный трек SoundCloud');if(!input)return;
+    try {const u=new URL(input);if(u.protocol!=='https:'||!['soundcloud.com','www.soundcloud.com'].includes(u.hostname)||u.username||u.password||u.pathname.split('/').filter(Boolean).length<2)throw new Error();
+      if(playback.current.started)recordSwitch();++requestSeq.current;yt.current?.pause();audio.current?.pause();setYoutubeActive(false);setPlaying(false);setLoading(false);setSoundcloudUrl(`https://soundcloud.com${u.pathname}`);
+    } catch {setNotice('Нужна ссылка https://soundcloud.com/исполнитель/трек');}
+  }
   const localVisible=tracks.filter(t => (view === 'liked' ? likes.includes(t.id) : view.startsWith('playlist:') ? playlistIds.includes(t.id) : true) && `${t.title} ${t.artist}`.toLowerCase().includes(search.toLowerCase()));
   const visible=search.trim().length>=2 ? unique([...localVisible,...results]) : localVisible;
   const isHome = view === 'home' && !search;
@@ -265,13 +258,15 @@ export default function HomePage() {
           <Shelf title="Микс дня" subtitle="По вашим любимым исполнителям" items={shelves.daily} onPlay={(t,list)=>void playTrack(t,list)} onRadio={t=>void startRadio(t)} />
           <Shelf title="В тренде" subtitle={shelves.trendingFallback?"Популярные поисковые запросы — тренды зеркал недоступны":"Российские и мировые подборки зеркал"} items={shelves.trending} onPlay={(t,list)=>void playTrack(t,list)} onRadio={t=>void startRadio(t)} />
           {!user && <p className="catalog-status">Войдите, чтобы сохранять историю и получать персональные подборки.</p>}</div></>}
-        <section className="section tracks-section"><div className="section-heading"><div><div className="eyebrow">{isHome?'PICK UP WHERE YOU LEFT OFF':'YOUR MUSIC, ALL IN ONE PLACE'}</div><h2>{title} <span>✳</span></h2><p>{search?'Поиск по вашей библиотеке и публичным каталогам.':isHome?'Ваши сохранённые треки.':'Ваша личная коллекция.'}</p></div>{isHome && <button onClick={()=>setView('library')}>See all <ArrowRight size={15}/></button>}</div><div className="track-head"><span>#</span><span>TITLE</span><span>ALBUM</span><span>ADDED</span><span><Clock3 size={15}/></span><span/></div><div className="track-list">{search && searchStatus && <div className="catalog-status">{searchStatus}</div>}{visible.length ? visible.map((t,i)=><div className={`track-row ${current.id===t.id&&playing?'is-playing':''}`} key={t.id}><button className="track-number" onClick={()=>void playTrack(t,visible)}>{current.id===t.id&&playing?<AudioLines size={16}/>:<><span>{String(i+1).padStart(2,'0')}</span><Play className="row-play" size={15} fill="currentColor"/></>}</button><button className="track-title" onClick={()=>void playTrack(t,visible)}><span className="track-art" style={{backgroundImage:`url('${imageFor(t)}')`}}/><span><b>{t.title}</b><small>{t.artist}</small></span></button><span className="track-album">{t.video_id?'Каталог':t.id===demo.id?'Демо':'Ваши файлы'}</span><span className="track-added">{t.video_id?'Стриминг':t.id===demo.id?'Демо':'Недавно'}</span><span className="track-time">{current.id===t.id&&duration?format(duration):t.duration?format(t.duration):'—'}</span><div className="track-controls">{t.video_id && <button title="Запустить радио по треку" aria-label={`Радио: ${t.title}`} onClick={()=>void startRadio(t)}><Radio size={16}/></button>}<button aria-label="Like track" onClick={()=>void toggleLike(t)} className={likes.includes(t.id)?'liked':''}><Heart size={16} fill={likes.includes(t.id)?'currentColor':'none'}/></button>{playlists.length>0 && <select aria-label="Add to playlist" value="" onChange={e=>void addToPlaylist(t,e.target.value)}><option value="">＋</option>{playlists.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select>}</div></div>) : <div className="empty">No tracks here yet. {view==='liked'?'Like a song to save it here.':view.startsWith('playlist:')?'Add tracks using the + menu in your library.':'Try another search or upload your own music.'}</div>}</div></section>
+        <section className="section tracks-section"><div className="section-heading"><div><div className="eyebrow">{isHome?'PICK UP WHERE YOU LEFT OFF':'YOUR MUSIC, ALL IN ONE PLACE'}</div><h2>{title} <span>✳</span></h2><p>{search?'Поиск по вашей библиотеке и публичным каталогам.':isHome?'Ваши сохранённые треки.':'Ваша личная коллекция.'}</p></div>{isHome && <button onClick={()=>setView('library')}>See all <ArrowRight size={15}/></button>}</div><div className="track-head"><span>#</span><span>TITLE</span><span>ALBUM</span><span>ADDED</span><span><Clock3 size={15}/></span><span/></div>{search && <div className="source-tabs" aria-label="Источник поиска">{([['youtube','YouTube'],['deezer','Deezer · превью'],['jiosaavn','JioSaavn']] as const).map(([id,label])=><button key={id} className={searchSource===id?'selected':''} onClick={()=>setSearchSource(id)}>{label}</button>)}<a href={`https://soundcloud.com/search/sounds?q=${encodeURIComponent(search)}`} target="_blank" rel="noreferrer">SoundCloud ↗</a><button onClick={openSoundcloud}>Вставить ссылку SoundCloud</button></div>}<div className="track-list">{search && searchStatus && <div className="catalog-status">{searchStatus}</div>}{visible.length ? visible.map((t,i)=><div className={`track-row ${current.id===t.id&&playing?'is-playing':''}`} key={t.id}><button className="track-number" onClick={()=>void playTrack(t,visible)}>{current.id===t.id&&playing?<AudioLines size={16}/>:<><span>{String(i+1).padStart(2,'0')}</span><Play className="row-play" size={15} fill="currentColor"/></>}</button><button className="track-title" onClick={()=>void playTrack(t,visible)}><span className="track-art" style={{backgroundImage:`url('${imageFor(t)}')`}}/><span><b>{t.title}</b><small>{t.artist}</small></span></button><span className="track-album">{t.video_id?'YouTube':t.source==='deezer'?'Deezer · 30 сек.':t.source==='jiosaavn'?'JioSaavn':t.id===demo.id?'Демо':'Ваши файлы'}</span><span className="track-added">{t.video_id||t.external_id?'Стриминг':t.id===demo.id?'Демо':'Недавно'}</span><span className="track-time">{current.id===t.id&&duration?format(duration):t.duration?format(t.duration):'—'}</span><div className="track-controls">{t.video_id && <button title="Запустить радио по треку" aria-label={`Радио: ${t.title}`} onClick={()=>void startRadio(t)}><Radio size={16}/></button>}<button aria-label="Like track" onClick={()=>void toggleLike(t)} className={likes.includes(t.id)?'liked':''}><Heart size={16} fill={likes.includes(t.id)?'currentColor':'none'}/></button>{playlists.length>0 && <select aria-label="Add to playlist" value="" onChange={e=>void addToPlaylist(t,e.target.value)}><option value="">＋</option>{playlists.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select>}</div></div>) : <div className="empty">No tracks here yet. {view==='liked'?'Like a song to save it here.':view.startsWith('playlist:')?'Add tracks using the + menu in your library.':'Try another search or upload your own music.'}</div>}</div></section>
         <footer>MADE FOR LISTENING <span>✳</span> STAY A WHILE</footer>
       </div>
     </main>
-    <div className="player"><div className="now-playing"><div className="player-art" style={{backgroundImage:`url('${imageFor(current)}')`}}/><div><b>{current.title}</b><small>{current.artist}</small></div><button className={likes.includes(current.id)?'liked':''} onClick={()=>void toggleLike(current)} aria-label="Like current track"><Heart size={17} fill={likes.includes(current.id)?'currentColor':'none'}/></button></div><div className="player-center"><div className="player-buttons"><button className={shuffle?'on':''} onClick={()=>setShuffle(!shuffle)} aria-label="Shuffle"><Shuffle size={16}/></button><button onClick={()=>void skip(-1)} aria-label="Previous"><SkipBack size={18} fill="currentColor"/></button><button className="play-main" onClick={()=>void playTrack(current)} aria-label={playing?'Pause':'Play'}>{loading?<AudioLines size={19}/>:playing?<Pause size={19} fill="currentColor"/>:<Play size={19} fill="currentColor"/>}</button><button onClick={()=>void skip(1)} aria-label="Next"><SkipForward size={18} fill="currentColor"/></button><button className={repeat?'on':''} onClick={()=>setRepeat(!repeat)} aria-label="Repeat"><Repeat2 size={17}/></button></div><div className="progress"><span>{format(elapsed)}</span><input aria-label="Seek" type="range" min="0" max={duration||0} value={Math.min(elapsed,duration||0)} onChange={e=>{if(audio.current) audio.current.currentTime=Number(e.target.value);playback.current.last=Number(e.target.value);setElapsed(Number(e.target.value))}} style={{'--progress':`${duration?elapsed/duration*100:0}%`} as React.CSSProperties}/><span>{format(duration)}</span></div></div><div className="player-right"><button title="Library" onClick={()=>setView('library')}><ListMusic size={18}/></button><button onClick={()=>setVolume(volume?0:70)} aria-label="Mute">{volume?<Volume2 size={18}/>:<VolumeX size={18}/>}</button><input aria-label="Volume" type="range" min="0" max="100" value={volume} onChange={e=>setVolume(Number(e.target.value))} style={{'--progress':`${volume}%`} as React.CSSProperties}/><span>{volume}%</span></div></div>
-    {/* Audio element events are attached once the browser creates the media element. */}
-    <AudioEvents audio={audio} playing={playing} trackId={current.id} onTime={onTime} onDuration={setDuration} onEnded={()=>{setPlaying(false);if(repeat && audio.current){playback.current={seconds:0,last:0,completed:false,started:true};audio.current.currentTime=0;void audio.current.play().then(()=>setPlaying(true)).catch(()=>setNotice('Ошибка воспроизведения.'));}else void skip(1,true)}} onError={()=>{if(currentRef.current.video_id) void retryStream();else {setPlaying(false);setNotice('Не удалось загрузить аудио.');}}} />
+    <div className="player"><div className="now-playing"><div className="player-art" style={{backgroundImage:`url('${imageFor(current)}')`}}/><div><b>{current.title}</b><small>{current.artist}</small></div><button className={likes.includes(current.id)?'liked':''} onClick={()=>void toggleLike(current)} aria-label="Like current track"><Heart size={17} fill={likes.includes(current.id)?'currentColor':'none'}/></button></div><div className="player-center"><div className="player-buttons"><button className={shuffle?'on':''} onClick={()=>setShuffle(!shuffle)} aria-label="Shuffle"><Shuffle size={16}/></button><button onClick={()=>void skip(-1)} aria-label="Previous"><SkipBack size={18} fill="currentColor"/></button><button className="play-main" onClick={()=>void playTrack(current)} aria-label={playing?'Pause':'Play'}>{loading?<AudioLines size={19}/>:playing?<Pause size={19} fill="currentColor"/>:<Play size={19} fill="currentColor"/>}</button><button onClick={()=>void skip(1)} aria-label="Next"><SkipForward size={18} fill="currentColor"/></button><button className={repeat?'on':''} onClick={()=>setRepeat(!repeat)} aria-label="Repeat"><Repeat2 size={17}/></button></div><div className="progress"><span>{format(elapsed)}</span><input aria-label="Seek" type="range" min="0" max={duration||0} value={Math.min(elapsed,duration||0)} onChange={e=>{if(current.video_id && youtubeActive)yt.current?.seek(Number(e.target.value));else if(audio.current) audio.current.currentTime=Number(e.target.value);playback.current.last=Number(e.target.value);setElapsed(Number(e.target.value))}} style={{'--progress':`${duration?elapsed/duration*100:0}%`} as React.CSSProperties}/><span>{format(duration)}</span></div></div><div className="player-right"><button title="Library" onClick={()=>setView('library')}><ListMusic size={18}/></button><button onClick={()=>setVolume(volume?0:70)} aria-label="Mute">{volume?<Volume2 size={18}/>:<VolumeX size={18}/>}</button><input aria-label="Volume" type="range" min="0" max="100" value={volume} onChange={e=>setVolume(Number(e.target.value))} style={{'--progress':`${volume}%`} as React.CSSProperties}/><span>{volume}%</span></div></div>
+    {soundcloudUrl && <aside className="soundcloud-panel"><div className="youtube-header"><span>SOUNDCLOUD · ВИДЖЕТ</span><button onClick={()=>setSoundcloudUrl(null)} aria-label="Закрыть SoundCloud">×</button></div><iframe title="SoundCloud player" width="100%" height="166" allow="autoplay" src={`https://w.soundcloud.com/player/?url=${encodeURIComponent(soundcloudUrl)}&auto_play=false`} /><small>Управляйте воспроизведением в виджете SoundCloud.</small></aside>}
+    {youtubeActive && current.video_id && <YouTubePlayer key={`${current.video_id}:${youtubeInstance}`} ref={yt} videoId={current.video_id} volume={volume} onFindAlternative={()=>{setSearch(`${current.artist} ${current.title}`);setSearchSource('deezer');setView('library');}} onClose={()=>{yt.current?.pause();setYoutubeActive(false);setPlaying(false);setLoading(false);}} onProgress={(time,d)=>{setElapsed(time);setDuration(d);if(advanceListening(playback.current,time,d,true,false))void logSignal(currentRef.current,'complete',playback.current.seconds);}} onState={state=>{if(state==='playing'){playback.current.started=true;setPlaying(true);setLoading(false);}else if(state==='paused'){setPlaying(false);setLoading(false);}else {setPlaying(false);if(repeat){playback.current={seconds:0,last:0,completed:false,started:true};yt.current?.seek(0);yt.current?.play();}else void skip(1,true);}}} onError={message=>{setLoading(false);setPlaying(false);setNotice(message);}} />}
+    {/* Local audio events. */}
+    <AudioEvents audio={audio} playing={playing} trackId={current.id} onTime={onTime} onDuration={setDuration} onEnded={()=>{setPlaying(false);if(repeat && audio.current){playback.current={seconds:0,last:0,completed:false,started:true};audio.current.currentTime=0;void audio.current.play().then(()=>setPlaying(true)).catch(()=>setNotice('Ошибка воспроизведения.'));}else void skip(1,true)}} onError={()=>{if(!currentRef.current.video_id){setPlaying(false);setNotice('Не удалось загрузить аудио.');}}} />
     {notice && <div className="toast" role="status">{notice}<button onClick={()=>setNotice('')}><X size={16}/></button></div>}
     {authOpen && <div className="modal-backdrop" onClick={()=>setAuthOpen(false)}><div className="modal" onClick={e=>e.stopPropagation()}><button className="modal-close" onClick={()=>setAuthOpen(false)}><X size={19}/></button><span className="brand-icon"><AudioLines size={22}/></span><h2>Your music, everywhere.</h2><p>Sign in to save your favorites, create playlists, and upload your own tracks.</p><form onSubmit={signIn}><label htmlFor="email">EMAIL ADDRESS</label><input id="email" type="email" placeholder="you@example.com" value={email} onChange={e=>setEmail(e.target.value)} required/><button className="primary" disabled={busy}>{busy?'Sending...':'Send me a sign-in link'} <ArrowRight size={16}/></button></form><small>No password needed. We&apos;ll email you a magic link.</small></div></div>}
   </div>;
