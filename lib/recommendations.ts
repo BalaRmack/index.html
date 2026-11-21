@@ -25,16 +25,16 @@ export function recentlyPlayed(signals:Signal[],now=Date.now()) {
   }
   return {ids,recordings};
 }
-const cleanKey=(s:string)=>s.toLocaleLowerCase().normalize('NFKC').replace(/\s*[-–—]\s*topic$/i,'').replace(/[^\p{L}\p{N}]+/gu,' ').trim();
-export const recordingKey=(artist:string,title:string)=>`${cleanKey(artist)}|${cleanKey(title)}`;
+export const artistKey=(s:string)=>s.toLocaleLowerCase().normalize('NFKC').replace(/\s*[-–—]\s*topic$/i,'').replace(/[^\p{L}\p{N}]+/gu,' ').trim();
+export const recordingKey=(artist:string,title:string)=>`${artistKey(artist)}|${artistKey(title)}`;
 /** Keep source order where possible; never place the same artist consecutively. */
 export function diverseRecommendations(tracks:CatalogTrack[],blocked:Set<string>,seen:string[],recentRecordings:Set<string>,previousArtist='',limit=20) {
   const pool=cleanRecommendations(tracks,blocked,seen).filter(t=>!recentRecordings.has(recordingKey(t.artist,t.title)));
-  const out:CatalogTrack[]=[];let last=cleanKey(previousArtist);
+  const out:CatalogTrack[]=[];let last=artistKey(previousArtist);
   while(pool.length && out.length<limit) {
-    const index=pool.findIndex(t=>cleanKey(t.artist)!==last);
+    const index=pool.findIndex(t=>artistKey(t.artist)!==last);
     if(index<0)break;
-    const [track]=pool.splice(index,1);out.push(track);last=cleanKey(track.artist);
+    const [track]=pool.splice(index,1);out.push(track);last=artistKey(track.artist);
   }
   return out;
 }

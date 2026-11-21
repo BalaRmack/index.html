@@ -7,7 +7,7 @@ import HomePage from '../app/page';
 
 test('Media Session controls the current YouTube queue and follows metadata and playback state',async()=>{
   const dom=new JSDOM('<!doctype html><div id="root"></div>',{url:'https://example.com/'});
-  Object.assign(globalThis,{window:dom.window,document:dom.window.document,IS_REACT_ACT_ENVIRONMENT:true});
+  Object.assign(globalThis,{window:dom.window,document:dom.window.document,Element:dom.window.Element,HTMLElement:dom.window.HTMLElement,SVGElement:dom.window.SVGElement,IS_REACT_ACT_ENVIRONMENT:true});
   Object.defineProperty(globalThis,'navigator',{value:dom.window.navigator,configurable:true});
   const handlers:Record<string,()=>void>={};
   const media={metadata:null as {title:string;artist:string;artwork:{src:string}[]}|null,playbackState:'none',setActionHandler:(name:string,fn:(()=>void)|null)=>{if(fn)handlers[name]=fn;else delete handlers[name]}};

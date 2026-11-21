@@ -7,7 +7,7 @@ import HomePage from '../app/page';
 
 test('home replaces a hung recommendation request with labelled fallback cards',async()=>{
   const dom=new JSDOM('<!doctype html><div id="root"></div>',{url:'https://example.com/'});
-  Object.assign(globalThis,{window:dom.window,document:dom.window.document,IS_REACT_ACT_ENVIRONMENT:true});
+  Object.assign(globalThis,{window:dom.window,document:dom.window.document,Element:dom.window.Element,HTMLElement:dom.window.HTMLElement,SVGElement:dom.window.SVGElement,IS_REACT_ACT_ENVIRONMENT:true});
   Object.defineProperty(globalThis,'navigator',{value:dom.window.navigator,configurable:true});
   const fetchBefore=globalThis.fetch;
   globalThis.fetch=(async()=>new Promise<Response>(()=>{})) as typeof fetch;

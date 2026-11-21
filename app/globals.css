@@ -149,3 +149,16 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
 }
 @media(max-width:430px){.hero{height:auto;min-height:264px}.hero-actions{flex-wrap:wrap}}
 @media(max-width:760px){.now-playing button{display:grid;place-items:center;flex:none;margin:0;padding:4px}.now-playing>div:nth-child(2){flex:1;overflow:hidden}}
+/* Motion and recommendation controls */
+.nav button{position:relative;isolation:isolate}.nav button.active{background:transparent}.nav button>svg,.nav-text{position:relative;z-index:1}
+.nav-indicator{position:absolute;inset:0;z-index:0;background:#252b27;border-radius:6px;pointer-events:none}
+.catalog-card{overflow:hidden}.catalog-card-main{transform-origin:center}.block-card{position:absolute;right:9px;top:9px;display:grid;place-items:center;width:34px;height:34px;border:1px solid #ffffff29;border-radius:50%;background:rgba(25,31,27,.9);color:#e1e9df;opacity:0;transform:translateY(6px) scale(.9);transition:opacity .25s,transform .35s cubic-bezier(.2,1.35,.35,1);z-index:2}
+.catalog-card:hover .block-card,.catalog-card:focus-within .block-card{opacity:1;transform:translateY(0) scale(1)}.block-card:hover{color:#fff;background:#36413a}
+.catalog-play{transform:translateY(6px) scale(.9);transition:opacity .25s,transform .35s cubic-bezier(.2,1.35,.35,1)}.catalog-card:hover .catalog-play,.catalog-card:focus-within .catalog-play{transform:translateY(0) scale(1)}
+.now-meta{min-width:0;display:flex;align-items:center;gap:12px;flex:1}.now-text{min-width:0;overflow:hidden}.now-playing .now-meta{min-width:0;overflow:hidden}.now-playing button{flex:none;margin:0;padding:4px}.equalizer{height:15px;display:flex;gap:2px;align-items:end;flex:none}.equalizer i{height:14px;width:2px;background:#b7d6a8;border-radius:2px;transform-origin:bottom}
+.hero:before{content:'';position:absolute;inset:0;pointer-events:none;background:linear-gradient(110deg,transparent 20%,rgba(195,226,199,.09) 50%,transparent 75%);background-size:200% 100%;animation:hero-drift 15s ease-in-out infinite alternate}
+.wave-button{animation:wave-breathe 5s ease-in-out infinite}.undo-block{white-space:nowrap;color:#d4ebcc;text-decoration:underline;text-underline-offset:3px}
+@keyframes hero-drift{from{background-position:100% 50%}to{background-position:0% 50%}}@keyframes wave-breathe{0%,100%{box-shadow:0 0 0 0 rgba(205,232,196,0)}50%{box-shadow:0 0 0 4px rgba(205,232,196,.10)}}
+@media(hover:none){.block-card{opacity:1;transform:none}}
+@media(max-width:760px){.nav-text{display:none}.player{height:112px;grid-template-columns:minmax(0,1fr) 64px;grid-template-rows:45px 48px;gap:2px 8px;padding:6px 12px}.now-playing{grid-column:1;grid-row:1;gap:5px}.now-playing .now-meta{gap:8px}.now-playing>div:nth-child(2){flex:unset}.player-art{width:36px;height:36px}.player-center{grid-column:1 / -1;grid-row:2;gap:2px}.player-right{grid-column:2;grid-row:1}.player-buttons{gap:24px}.sidebar{bottom:112px}.app-shell{padding-bottom:112px}.equalizer{gap:1px}.equalizer i{height:12px}.now-playing button{padding:3px}}
+@media(prefers-reduced-motion:reduce){.hero:before,.wave-button{animation:none}.block-card,.catalog-play{transition:none}}
