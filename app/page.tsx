@@ -3,10 +3,12 @@
 import { useEffect, useRef, useState } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
-import { ArrowDownToLine, ArrowLeft, ArrowRight, AudioLines, Check, ChevronDown, ChevronRight, Clock3, Disc3, Heart, Home, Library, ListMusic, LogIn, LogOut, MoreHorizontal, Music2, Pause, Play, Plus, Repeat2, Search, Shuffle, SkipBack, SkipForward, Sparkles, Upload, Volume2, VolumeX, X } from 'lucide-react';
+import { advanceListening, shouldRecordSkip } from '@/lib/listening';
+import { ArrowLeft, ArrowRight, AudioLines, ChevronDown, Clock3, Heart, Home, Library, ListMusic, LogOut, Music2, Pause, Play, Plus, Radio, Repeat2, Search, Shuffle, SkipBack, SkipForward, Sparkles, Upload, Volume2, VolumeX, X } from 'lucide-react';
 
-type Track = { id:string; title:string; artist:string; storage_path:string|null; owner_id?:string|null };
+type Track = { id:string; title:string; artist:string; storage_path:string|null; owner_id?:string|null; source?:'local'|'youtube'; video_id?:string|null; thumbnail?:string|null; duration?:number };
 type Playlist = { id:string; name:string };
+type Shelves = {similar:Track[];recent:Track[];daily:Track[];trending:Track[]};
 const demo: Track = { id:'demo-outfoxing', title:'Outfoxing the Fox', artist:'Kevin MacLeod', storage_path:null };
 const covers = [
   'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=500&q=80',
@@ -15,14 +17,11 @@ const covers = [
   'https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?w=500&q=80',
   'https://images.unsplash.com/photo-1519681393784-d120267933ba?w=500&q=80',
 ];
-const moods = [
-  {title:'The evening edit',sub:'A softer soundtrack for slowing down.',tag:'MADE FOR YOU'},
-  {title:'After hours',sub:'For the moments that are all yours.',tag:'YOUR MOOD'},
-  {title:'Golden hour',sub:'A little warmth for wherever you are.',tag:'YOUR MOOD'},
-  {title:'City lights',sub:'Find your rhythm after dark.',tag:'YOUR MOOD'},
-  {title:'Deep focus',sub:'Less noise, more headspace.',tag:'YOUR MOOD'},
-];
 const format = (s:number) => `${Math.floor((s || 0)/60)}:${String(Math.floor((s || 0)%60)).padStart(2,'0')}`;
+const canonical = (id:string) => /^yt:[A-Za-z0-9_-]{11}:/.test(id) ? id.slice(0,14) : id;
+const imageFor = (t:Track) => t.video_id ? `https://i.ytimg.com/vi/${t.video_id}/mqdefault.jpg` : t.id===demo.id ? covers[0] : covers[2];
+const fromDb = (t:Track):Track => t.video_id ? {...t,id:`yt:${t.video_id}`,thumbnail:`https://i.ytimg.com/vi/${t.video_id}/mqdefault.jpg`} : t;
+const unique = (ts:Track[]) => {const seen=new Set<string>();return ts.filter(t=>!seen.has(t.id)&&!!seen.add(t.id))};
 
 export default function HomePage() {
   const [user,setUser] = useState<User|null>(null);
@@ -32,8 +31,14 @@ export default function HomePage() {
   const [playlistIds,setPlaylistIds] = useState<string[]>([]);
   const [view,setView] = useState('home');
   const [search,setSearch] = useState('');
+  const [results,setResults] = useState<Track[]>([]);
+  const [searchStatus,setSearchStatus] = useState('');
+  const [shelves,setShelves] = useState<Shelves>({similar:[],recent:[],daily:[],trending:[]});
+  const [shelfStatus,setShelfStatus] = useState('Загружаем подборки…');
+  const [refreshShelves,setRefreshShelves] = useState(0);
   const [current,setCurrent] = useState<Track>(demo);
   const [playing,setPlaying] = useState(false);
+  const [loading,setLoading] = useState(false);
   const [elapsed,setElapsed] = useState(0);
   const [duration,setDuration] = useState(0);
   const [volume,setVolume] = useState(70);
@@ -47,8 +52,16 @@ export default function HomePage() {
   const ctx = useRef<AudioContext|null>(null);
   const gain = useRef<GainNode|null>(null);
   const fileInput = useRef<HTMLInputElement|null>(null);
-  const currentRef = useRef(current);
-  currentRef.current = current;
+  const currentRef = useRef(current); currentRef.current = current;
+  const volumeRef = useRef(volume); volumeRef.current = volume;
+  const queue = useRef<Track[]>([demo]);
+  const queueIndex = useRef(0);
+  const playedIds = useRef<string[]>([]);
+  const requestSeq = useRef(0);
+  const excludedMirrors = useRef<string[]>([]);
+  const retrying = useRef<number|null>(null);
+  const radioRequest = useRef(false);
+  const playback = useRef({seconds:0,last:0,completed:false,started:false});
 
   useEffect(() => {
     if (!supabase) return;
@@ -60,94 +73,177 @@ export default function HomePage() {
     if (!supabase || !user) { setTracks([demo]); setPlaylists([]); setLikes([]); return; }
     const db = supabase;
     Promise.all([db.from('tracks').select('*').order('created_at',{ascending:false}), db.from('playlists').select('id,name').order('created_at',{ascending:false}), db.from('likes').select('track_id')]).then(([t,p,l]) => {
-      if (t.data) setTracks(t.data as Track[]);
+      if (t.data) setTracks((t.data as Track[]).map(fromDb));
       if (p.data) setPlaylists(p.data as Playlist[]);
-      if (l.data) setLikes(l.data.map(x => x.track_id));
-      if (t.error || p.error || l.error) setNotice('Could not load your library. Please try again.');
+      if (l.data) setLikes(l.data.map(x => canonical(x.track_id)));
+      if (t.error || p.error || l.error) setNotice('Не удалось загрузить библиотеку.');
     });
   },[user]);
   useEffect(() => {
     if (!supabase || !user || !view.startsWith('playlist:')) { setPlaylistIds([]); return; }
-    supabase.from('playlist_tracks').select('track_id').eq('playlist_id',view.slice(9)).then(({data,error}) => { if (data) setPlaylistIds(data.map(x=>x.track_id)); if(error) setNotice(error.message); });
+    supabase.from('playlist_tracks').select('track_id').eq('playlist_id',view.slice(9)).then(({data,error}) => { if (data) setPlaylistIds(data.map(x=>canonical(x.track_id))); if(error) setNotice(error.message); });
   },[view,user]);
-  useEffect(() => { if(gain.current) gain.current.gain.value = volume/100; },[volume]);
-  useEffect(() => () => { audio.current?.pause(); void ctx.current?.close(); },[]);
+  useEffect(() => {
+    const query=search.trim(); if(query.length<2) {setResults([]);setSearchStatus(query?'Введите минимум 2 символа.':'');return;}
+    const controller=new AbortController(); setSearchStatus('Ищем в каталоге…');
+    const timer=setTimeout(()=>{void fetch(`/api/catalog/search?q=${encodeURIComponent(query)}`,{signal:controller.signal}).then(async r=>{const d=await r.json();if(!r.ok)throw new Error(d.error);setResults(d.tracks);setSearchStatus(d.tracks.length?'':'Ничего не найдено.');}).catch(e=>{if(e.name!=='AbortError'){setResults([]);setSearchStatus('Каталог временно недоступен.')}})},400);
+    return ()=>{clearTimeout(timer);controller.abort()};
+  },[search]);
+  useEffect(() => { setShelves({similar:[],recent:[],daily:[],trending:[]}); },[user?.id]);
+  useEffect(() => {
+    const controller=new AbortController();
+    async function load() {
+      setShelfStatus('Загружаем подборки…');
+      const session=await supabase?.auth.getSession(); const token=session?.data.session?.access_token;
+      try {const r=await fetch('/api/recommendations?mode=home',{headers:token?{Authorization:`Bearer ${token}`}:{},signal:controller.signal});const data=await r.json();if(!r.ok)throw new Error(data.error);setShelves(data);setShelfStatus(data.similar.length||data.recent.length||data.daily.length||data.trending.length?'':'Зеркала временно недоступны.');}
+      catch(e){if((e as Error).name!=='AbortError')setShelfStatus('Не удалось загрузить подборки.');}
+    }
+    void load(); return ()=>controller.abort();
+  },[user,refreshShelves]);
+  useEffect(() => { if(gain.current) gain.current.gain.value = volume/100; if(audio.current && currentRef.current.video_id) audio.current.volume=volume/100; },[volume]);
+  useEffect(() => () => { ++requestSeq.current; audio.current?.pause(); void ctx.current?.close(); },[]);
 
-  function initAudio() {
-    if (!audio.current) { audio.current = new Audio(); audio.current.preload = 'auto'; audio.current.crossOrigin = 'anonymous'; }
-    if (!ctx.current) {
-      ctx.current = new AudioContext();
-      const source = ctx.current.createMediaElementSource(audio.current);
-      gain.current = ctx.current.createGain(); gain.current.gain.value = volume/100;
+  async function authHeaders() {const session=await supabase?.auth.getSession();const token=session?.data.session?.access_token;return token?{Authorization:`Bearer ${token}`} : undefined;}
+  async function logSignal(track:Track,event_type:'like'|'playlist_add'|'complete'|'skip',seconds=0) {
+    if(!user || !supabase) return;
+    const {error}=await supabase.from('listening_history').insert({user_id:user.id,track_id:track.id,video_id:track.video_id || null,title:track.title.slice(0,300),artist:track.artist.slice(0,200),event_type,listened_seconds:Math.max(0,Math.floor(seconds))});
+    if(error) setNotice('Не удалось сохранить историю прослушивания.');
+    else if(event_type!=='skip') setRefreshShelves(x=>x+1);
+  }
+  function recordSwitch() { const p=playback.current; if(shouldRecordSkip(p)) void logSignal(currentRef.current,'skip',p.seconds); }
+  function onTime(time:number) {
+    const p=playback.current; const player=audio.current; setElapsed(time);
+    if(advanceListening(p,time,player?.duration || 0,!!player && !player.paused,!!player?.seeking)) void logSignal(currentRef.current,'complete',p.seconds);
+  }
+  function initAudio(remote:boolean) {
+    const existing=audio.current;
+    // A cross-origin media source routed through Web Audio is silent without CORS.
+    // Remote media therefore uses native HTMLAudio; local audio keeps the Web Audio gain path.
+    if(existing && Boolean(existing.dataset.remote)===remote) return existing;
+    if(existing) {existing.pause();existing.removeAttribute('src');existing.load();}
+    const player=new Audio(); player.preload='auto';
+    if(remote) {player.dataset.remote='1';player.volume=volumeRef.current/100;}
+    else {
+      if(!ctx.current) ctx.current=new AudioContext();
+      const source=ctx.current.createMediaElementSource(player); gain.current=ctx.current.createGain(); gain.current.gain.value=volumeRef.current/100;
       source.connect(gain.current).connect(ctx.current.destination);
     }
-    return audio.current;
+    audio.current=player; return player;
   }
-  async function playTrack(track:Track) {
+  async function resolveAndPlay(track:Track,seq:number) {
+    if(retrying.current===seq) return;
+    retrying.current=seq;
     try {
-      const player = initAudio();
-      if (currentRef.current.id === track.id && player.src) {
-        if (player.paused) { await ctx.current?.resume(); await player.play(); setPlaying(true); }
-        else { player.pause(); setPlaying(false); }
-        return;
+      let lastError='Не удалось запустить трек.';
+      while(seq===requestSeq.current && excludedMirrors.current.length<6) {
+        const response=await fetch(`/api/catalog/stream?id=${track.video_id}&exclude=${encodeURIComponent(excludedMirrors.current.join(','))}`);
+        const data=await response.json(); if(!response.ok) throw new Error(data.error || lastError);
+        if(seq!==requestSeq.current) return;
+        excludedMirrors.current.push(data.mirror);
+        const player=audio.current!; player.src=data.url;
+        try {await player.play(); if(seq!==requestSeq.current) return; playback.current.started=true;setPlaying(true);setLoading(false);return;}
+        catch(e) {if((e as Error).name==='NotAllowedError') throw new Error('Браузер заблокировал воспроизведение. Нажмите Play ещё раз.');lastError='Поток недоступен, пробуем другое зеркало…';}
       }
-      let url = '/audio/outfoxing.mp3';
-      if (track.storage_path) {
-        if (!supabase) throw new Error('Supabase is not configured.');
-        const {data,error} = await supabase.storage.from('audio').createSignedUrl(track.storage_path,3600);
-        if(error || !data) throw new Error(error?.message || 'Could not open this track.');
-        url = data.signedUrl;
-      }
-      player.src = url; player.currentTime = 0; setCurrent(track); setElapsed(0); setDuration(0);
-      await ctx.current?.resume(); await player.play(); setPlaying(true);
-    } catch (e) { setPlaying(false); setNotice(e instanceof Error ? e.message : 'Playback failed.'); }
+      throw new Error(lastError);
+    } finally { if(retrying.current===seq) retrying.current=null; }
   }
-  function togglePlay() { void playTrack(current); }
-  function skip(direction:number) {
-    const list = visible.length ? visible : tracks;
-    let index = list.findIndex(t=>t.id===current.id);
-    index = shuffle && list.length > 1 ? (index + 1 + Math.floor(Math.random()*(list.length-1))) % list.length : (index + direction + list.length) % list.length;
-    if(list[index]?.id === current.id && audio.current) { audio.current.currentTime = 0; void audio.current.play().then(()=>setPlaying(true)).catch(()=>setNotice('Playback failed.')); }
-    else if(list[index]) void playTrack(list[index]);
+  async function playTrack(track:Track,list?:Track[],force=false) {
+    let seq=requestSeq.current;
+    try {
+      const same=currentRef.current.id===track.id && audio.current?.src;
+      if(same && !force && !loading) {
+        if(audio.current!.paused) {if(ctx.current && !track.video_id) await ctx.current.resume();await audio.current!.play();playback.current.started=true;setPlaying(true);} else {audio.current!.pause();setPlaying(false);} return;
+      }
+      if(playback.current.started && currentRef.current.id!==track.id) recordSwitch();
+      seq=++requestSeq.current; retrying.current=null;
+      if(list) {queue.current=list;queueIndex.current=Math.max(0,list.findIndex(x=>x.id===track.id));playedIds.current=[];}
+      if(track.video_id && !playedIds.current.includes(track.video_id)) playedIds.current.push(track.video_id);
+      excludedMirrors.current=[]; playback.current={seconds:0,last:0,completed:false,started:false};
+      setCurrent(track); currentRef.current=track; setElapsed(0);setDuration(0);setPlaying(false);setLoading(true);
+      const player=initAudio(Boolean(track.video_id));player.pause();player.removeAttribute('src');player.load();
+      if(track.video_id) await resolveAndPlay(track,seq);
+      else {
+        let url='/audio/outfoxing.mp3';
+        if(track.storage_path) {if(!supabase) throw new Error('Supabase не настроен.');const {data,error}=await supabase.storage.from('audio').createSignedUrl(track.storage_path,3600);if(error||!data)throw new Error(error?.message || 'Не удалось открыть трек.');url=data.signedUrl;}
+        if(seq!==requestSeq.current)return;player.src=url;await ctx.current?.resume();await player.play();if(seq!==requestSeq.current)return;playback.current.started=true;setPlaying(true);setLoading(false);
+      }
+    } catch(e) {if(seq===requestSeq.current){audio.current?.removeAttribute('src');setPlaying(false);setLoading(false);setNotice(e instanceof Error ? e.message : 'Ошибка воспроизведения.');}}
+  }
+  async function retryStream() {
+    if(!currentRef.current.video_id || retrying.current!==null || !playback.current.started) return;
+    setLoading(true);setPlaying(false);
+    try {await resolveAndPlay(currentRef.current,requestSeq.current);} catch(e) {audio.current?.removeAttribute('src');setLoading(false);setNotice(e instanceof Error?e.message:'Нет доступных потоков.');}
+  }
+  async function moreRadio(seed:Track) {
+    if(!seed.video_id) {setNotice('Радио доступно для треков из каталога.');return [];}
+    const headers=await authHeaders();
+    const p=new URLSearchParams({mode:'radio',seed:seed.video_id,seen:playedIds.current.slice(-100).join(',')});
+    const r=await fetch(`/api/recommendations?${p}`,{headers});const data=await r.json();if(!r.ok)throw new Error(data.error||'Не удалось загрузить радио.');return data.tracks as Track[];
+  }
+  async function skip(direction:number,automatic=false) {
+    if(!automatic) recordSwitch();
+    const list=queue.current;
+    let next=shuffle && direction>0 && list.length>1 ? Math.floor(Math.random()*(list.length-1)) : queueIndex.current+direction;
+    if(shuffle && direction>0 && list.length>1 && next>=queueIndex.current)next++;
+    if(next<0) next=0;
+    if(next<list.length) {queueIndex.current=next;playback.current.started=false;void playTrack(list[next],undefined,true);return;}
+    if(currentRef.current.video_id) {
+      if(radioRequest.current) return; radioRequest.current=true; const seq=requestSeq.current; audio.current?.pause();playback.current.started=false;setPlaying(false);setLoading(true);
+      try {const more=await moreRadio(currentRef.current);if(seq!==requestSeq.current)return;if(!more.length){setLoading(false);setPlaying(false);setNotice('Похожие треки не найдены. Попробуйте другое радио.');return;}queue.current=[...list,...more];queueIndex.current=list.length;playback.current.started=false;void playTrack(more[0],undefined,true);}
+      catch(e){if(seq===requestSeq.current){setLoading(false);setPlaying(false);setNotice(e instanceof Error?e.message:'Радио недоступно.');}} finally {radioRequest.current=false;}
+    } else {setPlaying(false);setNotice('Очередь закончилась.');}
+  }
+  async function startRadio(track:Track) {
+    if(!track?.video_id){setNotice('Радио доступно для треков из каталога.');return;}
+    // The seed starts immediately; its related tracks are fetched when the queue ends.
+    void playTrack(track,[track],true);setNotice('Радио запущено: похожие треки добавятся автоматически.');
+  }
+  async function ensureSaved(track:Track) {
+    if(!user || !supabase) throw new Error('Войдите, чтобы сохранить трек.');
+    if(!track.video_id) return track.id;
+    const id=`yt:${track.video_id}:${user.id}`;
+    const {error}=await supabase.from('tracks').upsert({id,owner_id:user.id,title:track.title.slice(0,300),artist:track.artist.slice(0,200),storage_path:null,source:'youtube',video_id:track.video_id},{onConflict:'id'});
+    if(error) throw error;
+    setTracks(prev=>unique([track,...prev]));return id;
   }
   async function toggleLike(track:Track) {
     if (!user || !supabase) { setAuthOpen(true); return; }
-    const exists = likes.includes(track.id);
-    const {error} = exists ? await supabase.from('likes').delete().eq('user_id',user.id).eq('track_id',track.id) : await supabase.from('likes').insert({user_id:user.id,track_id:track.id});
-    if(error) setNotice(error.message); else setLikes(exists ? likes.filter(id=>id!==track.id) : [...likes,track.id]);
+    const exists=likes.includes(track.id);
+    try {const id=await ensureSaved(track);const {error}=exists?await supabase.from('likes').delete().eq('user_id',user.id).eq('track_id',id):await supabase.from('likes').insert({user_id:user.id,track_id:id});if(error)throw error;setLikes(prev=>exists?prev.filter(x=>x!==track.id):[...prev,track.id]);if(!exists)void logSignal(track,'like');}
+    catch(e){setNotice(e instanceof Error?e.message:'Не удалось сохранить лайк.');}
   }
   async function createPlaylist() {
     if (!user || !supabase) { setAuthOpen(true); return; }
-    const name = window.prompt('Name your playlist'); if (!name?.trim()) return;
+    const name = window.prompt('Название плейлиста'); if (!name?.trim()) return;
     const {data,error} = await supabase.from('playlists').insert({name:name.trim(),owner_id:user.id}).select('id,name').single();
     if(error) setNotice(error.message); else { setPlaylists([data,...playlists]); setView(`playlist:${data.id}`); }
   }
   async function addToPlaylist(track:Track, id:string) {
     if(!supabase || !id) return;
-    const {error} = await supabase.from('playlist_tracks').upsert({playlist_id:id,track_id:track.id});
-    setNotice(error ? error.message : 'Added to your playlist.');
-    if(view === `playlist:${id}` && !playlistIds.includes(track.id)) setPlaylistIds([...playlistIds,track.id]);
+    try {const saved=await ensureSaved(track);const {error}=await supabase.from('playlist_tracks').upsert({playlist_id:id,track_id:saved});if(error)throw error;setNotice('Добавлено в плейлист.');void logSignal(track,'playlist_add');if(view===`playlist:${id}`&&!playlistIds.includes(track.id))setPlaylistIds([...playlistIds,track.id]);}
+    catch(e){setNotice(e instanceof Error?e.message:'Не удалось добавить трек.');}
   }
   async function upload(file:File) {
     if(!user || !supabase) { setAuthOpen(true); return; }
-    if(file.size > 50*1024*1024) { setNotice('Please choose a file under 50 MB.'); return; }
+    if(file.size > 50*1024*1024) { setNotice('Выберите файл меньше 50 МБ.'); return; }
     setBusy(true);
     const id = crypto.randomUUID(); const path = `${user.id}/${id}-${file.name.replace(/[^a-zA-Z0-9._-]/g,'_')}`;
     const {error:storageError} = await supabase.storage.from('audio').upload(path,file);
     if(storageError) { setNotice(storageError.message); setBusy(false); return; }
     const track = {id,owner_id:user.id,title:file.name.replace(/\.[^.]+$/,''),artist:'Your upload',storage_path:path};
     const {error} = await supabase.from('tracks').insert(track);
-    if(error) { await supabase.storage.from('audio').remove([path]); setNotice(error.message); } else { setTracks([track,...tracks]); setNotice('Track added to your library.'); setView('library'); }
+    if(error) { await supabase.storage.from('audio').remove([path]); setNotice(error.message); } else { setTracks([track,...tracks]); setNotice('Трек добавлен в библиотеку.'); setView('library'); }
     setBusy(false);
   }
   async function signIn(e:React.FormEvent) {
-    e.preventDefault(); if(!supabase) { setNotice('Supabase is not configured.'); return; }
+    e.preventDefault(); if(!supabase) { setNotice('Supabase не настроен.'); return; }
     setBusy(true); const {error} = await supabase.auth.signInWithOtp({email,options:{emailRedirectTo:window.location.origin}}); setBusy(false);
-    if(error) setNotice(error.message); else {setAuthOpen(false);setNotice('Check your inbox for your sign-in link.');}
+    if(error) setNotice(error.message); else {setAuthOpen(false);setNotice('Проверьте почту: мы отправили ссылку для входа.');}
   }
-  const visible = tracks.filter(t => (view === 'liked' ? likes.includes(t.id) : view.startsWith('playlist:') ? playlistIds.includes(t.id) : true) && `${t.title} ${t.artist}`.toLowerCase().includes(search.toLowerCase()));
+  const localVisible=tracks.filter(t => (view === 'liked' ? likes.includes(t.id) : view.startsWith('playlist:') ? playlistIds.includes(t.id) : true) && `${t.title} ${t.artist}`.toLowerCase().includes(search.toLowerCase()));
+  const visible=search.trim().length>=2 ? unique([...localVisible,...results]) : localVisible;
   const isHome = view === 'home' && !search;
-  const title = view === 'liked' ? 'Liked songs' : view.startsWith('playlist:') ? playlists.find(p=>p.id===view.slice(9))?.name || 'Playlist' : view === 'library' ? 'Your library' : search ? 'Search results' : 'Recently played';
+  const title = search ? 'Результаты поиска' : view === 'liked' ? 'Любимые треки' : view.startsWith('playlist:') ? playlists.find(p=>p.id===view.slice(9))?.name || 'Плейлист' : view === 'library' ? 'Ваша библиотека' : 'Ваша музыка';
   return <div className="app-shell">
     <aside className="sidebar">
       <button className="brand" onClick={()=>{setView('home');setSearch('')}}><span className="brand-icon"><AudioLines size={20}/></span><span>nocturne<span className="brand-dot">.</span></span></button>
@@ -159,24 +255,34 @@ export default function HomePage() {
       <div className="side-bottom"><div className="mini-note"><Sparkles size={16}/><span>GOOD MUSIC, GOOD MOOD</span></div><p>Made for the moments<br/>in between.</p><span className="side-footer">© 2026 NOCTURNE</span></div>
     </aside>
     <main className="main">
-      <header className="topbar"><div className="history"><button aria-label="Back" onClick={()=>history.back()}><ArrowLeft size={18}/></button><button aria-label="Forward" onClick={()=>history.forward()}><ArrowRight size={18}/></button></div><div className="search-wrap"><Search size={17}/><input id="search" value={search} onChange={e=>setSearch(e.target.value)} placeholder="What do you want to listen to?"/><span>⌘ K</span></div><div className="top-actions"><button className="upload-button" onClick={()=>user?fileInput.current?.click():setAuthOpen(true)}><Upload size={16}/><span>{busy?'Uploading...':'Upload music'}</span></button><input ref={fileInput} type="file" accept="audio/*" hidden onChange={e=>{const f=e.target.files?.[0];if(f) void upload(f);e.target.value=''}}/><button className="profile" onClick={()=>user?void supabase?.auth.signOut():setAuthOpen(true)}><span className="avatar">{user?.email?.[0].toUpperCase() || 'N'}</span><span>{user ? user.email?.split('@')[0] : 'Guest listener'}</span>{user?<LogOut size={15}/>:<ChevronDown size={15}/>}</button></div></header>
+      <header className="topbar"><div className="history"><button aria-label="Back" onClick={()=>history.back()}><ArrowLeft size={18}/></button><button aria-label="Forward" onClick={()=>history.forward()}><ArrowRight size={18}/></button></div><div className="search-wrap"><Search size={17}/><input id="search" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Исполнитель или название трека"/><span>⌘ K</span></div><div className="top-actions"><button className="upload-button" onClick={()=>user?fileInput.current?.click():setAuthOpen(true)}><Upload size={16}/><span>{busy?'Uploading...':'Upload music'}</span></button><input ref={fileInput} type="file" accept="audio/*" hidden onChange={e=>{const f=e.target.files?.[0];if(f) void upload(f);e.target.value=''}}/><button className="profile" onClick={()=>user?void supabase?.auth.signOut():setAuthOpen(true)}><span className="avatar">{user?.email?.[0].toUpperCase() || 'N'}</span><span>{user ? user.email?.split('@')[0] : 'Guest listener'}</span>{user?<LogOut size={15}/>:<ChevronDown size={15}/>}</button></div></header>
       <div className="content">
         {isHome && <><div className="greeting"><div><div className="eyebrow"><span className="green-dot"/> YOUR SOUND, YOUR SPACE</div><h1>Good to see you<span>.</span></h1><p>Find the soundtrack to your day.</p></div><span className="date-label">A LITTLE MORE ROOM FOR MUSIC <AudioLines size={16}/></span></div>
-          <section className="hero"><div className="hero-content"><div className="hero-kicker"><Sparkles size={14}/> THE NOCTURNE EDIT <span>01 / 05</span></div><h2>Music for<br/><em>every moment.</em></h2><p>Escape the noise. Find your rhythm.<br/>Let the music take you somewhere else.</p><div className="hero-actions"><button className="primary" onClick={()=>void playTrack(demo)}><Play size={15} fill="currentColor"/> Play demo</button><button className="hero-link" onClick={()=>setView('library')}>Explore your library <ArrowRight size={16}/></button></div></div><div className="hero-caption"><span>CURATED FOR YOU</span><b>Find your<br/>kind of quiet.</b></div><div className="hero-index"><span className="selected"/> <span/> <span/> <span/></div></section>
-          <section className="section"><div className="section-heading"><div><div className="eyebrow">A LITTLE SOMETHING FOR YOU</div><h2>Made for your moments <span>✳</span></h2><p>Explore the moods behind our demo track.</p></div><button onClick={()=>setView('library')}>Your library <ArrowRight size={15}/></button></div><div className="cards">{moods.map((m,i)=><button className="mood-card" key={m.title} onClick={()=>void playTrack(demo)}><div className="card-image" style={{backgroundImage:`linear-gradient(0deg, rgba(0,0,0,.25),transparent 55%), url('${covers[i]}')`}}><span className="card-tag">{m.tag}</span><span className="card-play"><Play size={17} fill="currentColor"/></span>{i===0 && <span className="cover-title">THE<br/>EVENING<br/><i>EDIT.</i></span>}</div><b>{m.title}</b><p>{m.sub}</p></button>)}</div></section></>}
-        <section className="section tracks-section"><div className="section-heading"><div><div className="eyebrow">{isHome?'PICK UP WHERE YOU LEFT OFF':'YOUR MUSIC, ALL IN ONE PLACE'}</div><h2>{title} <span>✳</span></h2><p>{isHome?'Good music is always worth coming back to.':'Your personal collection, ready when you are.'}</p></div>{isHome && <button onClick={()=>setView('library')}>See all <ArrowRight size={15}/></button>}</div><div className="track-head"><span>#</span><span>TITLE</span><span>ALBUM</span><span>ADDED</span><span><Clock3 size={15}/></span><span/></div><div className="track-list">{visible.length ? visible.map((t,i)=><div className={`track-row ${current.id===t.id&&playing?'is-playing':''}`} key={t.id}><button className="track-number" onClick={()=>void playTrack(t)}>{current.id===t.id&&playing?<AudioLines size={16}/>:<><span>{String(i+1).padStart(2,'0')}</span><Play className="row-play" size={15} fill="currentColor"/></>}</button><button className="track-title" onClick={()=>void playTrack(t)}><span className="track-art" style={{backgroundImage:`url('${t.id===demo.id?covers[0]:covers[2]}')`}}/><span><b>{t.title}</b><small>{t.artist}</small></span></button><span className="track-album">{t.id===demo.id?'Demo collection':'Your uploads'}</span><span className="track-added">{t.id===demo.id?'Featured':'Recently'}</span><span className="track-time">{current.id===t.id&&duration?format(duration):'—'}</span><div className="track-controls"><button aria-label="Like track" onClick={()=>void toggleLike(t)} className={likes.includes(t.id)?'liked':''}><Heart size={16} fill={likes.includes(t.id)?'currentColor':'none'}/></button>{playlists.length>0 && <select aria-label="Add to playlist" value="" onChange={e=>void addToPlaylist(t,e.target.value)}><option value="">＋</option>{playlists.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select>}</div></div>) : <div className="empty">No tracks here yet. {view==='liked'?'Like a song to save it here.':view.startsWith('playlist:')?'Add tracks using the + menu in your library.':'Try another search or upload your own music.'}</div>}</div></section>
+          <section className="hero"><div className="hero-content"><div className="hero-kicker"><Sparkles size={14}/> THE NOCTURNE EDIT <span>01 / 05</span></div><h2>Музыка для<br/><em>ваших моментов.</em></h2><p>Откройте музыку для каждого момента.<br/>Ваше радио становится лучше вместе с вами.</p><div className="hero-actions"><button className="primary" onClick={()=>void startRadio(shelves.similar[0] || shelves.recent[0] || shelves.daily[0] || shelves.trending[0])} disabled={![...shelves.similar,...shelves.recent,...shelves.daily,...shelves.trending].length}><Play size={15} fill="currentColor"/> Моя волна</button><button className="hero-link" onClick={()=>setView('library')}>Explore your library <ArrowRight size={16}/></button></div></div><div className="hero-caption"><span>CURATED FOR YOU</span><b>Find your<br/>kind of quiet.</b></div><div className="hero-index"><span className="selected"/> <span/> <span/> <span/></div></section>
+          <div className="recommendations"><div className="recommendations-heading"><div><div className="eyebrow">МУЗЫКА ДЛЯ ВАС</div><h2>Откройте что-то новое <span>✳</span></h2></div><button onClick={()=>setRefreshShelves(x=>x+1)}>Обновить <ArrowRight size={15}/></button></div>{shelfStatus && <p className="catalog-status">{shelfStatus}</p>}
+          <Shelf title="Похоже на ваши лайки" subtitle="На основе понравившихся треков" items={shelves.similar} onPlay={(t,list)=>void playTrack(t,list)} onRadio={t=>void startRadio(t)} />
+          <Shelf title="Недавно слушали" subtitle="Треки, к которым хочется вернуться" items={shelves.recent} onPlay={(t,list)=>void playTrack(t,list)} onRadio={t=>void startRadio(t)} />
+          <Shelf title="Микс дня" subtitle="По вашим любимым исполнителям" items={shelves.daily} onPlay={(t,list)=>void playTrack(t,list)} onRadio={t=>void startRadio(t)} />
+          <Shelf title="В тренде" subtitle="Музыка из российских и мировых подборок зеркал" items={shelves.trending} onPlay={(t,list)=>void playTrack(t,list)} onRadio={t=>void startRadio(t)} />
+          {!user && <p className="catalog-status">Войдите, чтобы сохранять историю и получать персональные подборки.</p>}</div></>}
+        <section className="section tracks-section"><div className="section-heading"><div><div className="eyebrow">{isHome?'PICK UP WHERE YOU LEFT OFF':'YOUR MUSIC, ALL IN ONE PLACE'}</div><h2>{title} <span>✳</span></h2><p>{search?'Поиск по вашей библиотеке и публичным каталогам.':isHome?'Ваши сохранённые треки.':'Ваша личная коллекция.'}</p></div>{isHome && <button onClick={()=>setView('library')}>See all <ArrowRight size={15}/></button>}</div><div className="track-head"><span>#</span><span>TITLE</span><span>ALBUM</span><span>ADDED</span><span><Clock3 size={15}/></span><span/></div><div className="track-list">{search && searchStatus && <div className="catalog-status">{searchStatus}</div>}{visible.length ? visible.map((t,i)=><div className={`track-row ${current.id===t.id&&playing?'is-playing':''}`} key={t.id}><button className="track-number" onClick={()=>void playTrack(t,visible)}>{current.id===t.id&&playing?<AudioLines size={16}/>:<><span>{String(i+1).padStart(2,'0')}</span><Play className="row-play" size={15} fill="currentColor"/></>}</button><button className="track-title" onClick={()=>void playTrack(t,visible)}><span className="track-art" style={{backgroundImage:`url('${imageFor(t)}')`}}/><span><b>{t.title}</b><small>{t.artist}</small></span></button><span className="track-album">{t.video_id?'Каталог':t.id===demo.id?'Демо':'Ваши файлы'}</span><span className="track-added">{t.video_id?'Стриминг':t.id===demo.id?'Демо':'Недавно'}</span><span className="track-time">{current.id===t.id&&duration?format(duration):t.duration?format(t.duration):'—'}</span><div className="track-controls">{t.video_id && <button title="Запустить радио по треку" aria-label={`Радио: ${t.title}`} onClick={()=>void startRadio(t)}><Radio size={16}/></button>}<button aria-label="Like track" onClick={()=>void toggleLike(t)} className={likes.includes(t.id)?'liked':''}><Heart size={16} fill={likes.includes(t.id)?'currentColor':'none'}/></button>{playlists.length>0 && <select aria-label="Add to playlist" value="" onChange={e=>void addToPlaylist(t,e.target.value)}><option value="">＋</option>{playlists.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select>}</div></div>) : <div className="empty">No tracks here yet. {view==='liked'?'Like a song to save it here.':view.startsWith('playlist:')?'Add tracks using the + menu in your library.':'Try another search or upload your own music.'}</div>}</div></section>
         <footer>MADE FOR LISTENING <span>✳</span> STAY A WHILE</footer>
       </div>
     </main>
-    <div className="player"><div className="now-playing"><div className="player-art" style={{backgroundImage:`url('${current.id===demo.id?covers[0]:covers[2]}')`}}/><div><b>{current.title}</b><small>{current.artist}</small></div><button className={likes.includes(current.id)?'liked':''} onClick={()=>void toggleLike(current)} aria-label="Like current track"><Heart size={17} fill={likes.includes(current.id)?'currentColor':'none'}/></button></div><div className="player-center"><div className="player-buttons"><button className={shuffle?'on':''} onClick={()=>setShuffle(!shuffle)} aria-label="Shuffle"><Shuffle size={16}/></button><button onClick={()=>skip(-1)} aria-label="Previous"><SkipBack size={18} fill="currentColor"/></button><button className="play-main" onClick={togglePlay} aria-label={playing?'Pause':'Play'}>{playing?<Pause size={19} fill="currentColor"/>:<Play size={19} fill="currentColor"/>}</button><button onClick={()=>skip(1)} aria-label="Next"><SkipForward size={18} fill="currentColor"/></button><button className={repeat?'on':''} onClick={()=>setRepeat(!repeat)} aria-label="Repeat"><Repeat2 size={17}/></button></div><div className="progress"><span>{format(elapsed)}</span><input aria-label="Seek" type="range" min="0" max={duration||0} value={Math.min(elapsed,duration||0)} onChange={e=>{if(audio.current) audio.current.currentTime=Number(e.target.value);setElapsed(Number(e.target.value))}} style={{'--progress':`${duration?elapsed/duration*100:0}%`} as React.CSSProperties}/><span>{format(duration)}</span></div></div><div className="player-right"><button title="Library" onClick={()=>setView('library')}><ListMusic size={18}/></button><button onClick={()=>setVolume(volume?0:70)} aria-label="Mute">{volume?<Volume2 size={18}/>:<VolumeX size={18}/>}</button><input aria-label="Volume" type="range" min="0" max="100" value={volume} onChange={e=>setVolume(Number(e.target.value))} style={{'--progress':`${volume}%`} as React.CSSProperties}/><span>{volume}%</span></div></div>
+    <div className="player"><div className="now-playing"><div className="player-art" style={{backgroundImage:`url('${imageFor(current)}')`}}/><div><b>{current.title}</b><small>{current.artist}</small></div><button className={likes.includes(current.id)?'liked':''} onClick={()=>void toggleLike(current)} aria-label="Like current track"><Heart size={17} fill={likes.includes(current.id)?'currentColor':'none'}/></button></div><div className="player-center"><div className="player-buttons"><button className={shuffle?'on':''} onClick={()=>setShuffle(!shuffle)} aria-label="Shuffle"><Shuffle size={16}/></button><button onClick={()=>void skip(-1)} aria-label="Previous"><SkipBack size={18} fill="currentColor"/></button><button className="play-main" onClick={()=>void playTrack(current)} aria-label={playing?'Pause':'Play'}>{loading?<AudioLines size={19}/>:playing?<Pause size={19} fill="currentColor"/>:<Play size={19} fill="currentColor"/>}</button><button onClick={()=>void skip(1)} aria-label="Next"><SkipForward size={18} fill="currentColor"/></button><button className={repeat?'on':''} onClick={()=>setRepeat(!repeat)} aria-label="Repeat"><Repeat2 size={17}/></button></div><div className="progress"><span>{format(elapsed)}</span><input aria-label="Seek" type="range" min="0" max={duration||0} value={Math.min(elapsed,duration||0)} onChange={e=>{if(audio.current) audio.current.currentTime=Number(e.target.value);playback.current.last=Number(e.target.value);setElapsed(Number(e.target.value))}} style={{'--progress':`${duration?elapsed/duration*100:0}%`} as React.CSSProperties}/><span>{format(duration)}</span></div></div><div className="player-right"><button title="Library" onClick={()=>setView('library')}><ListMusic size={18}/></button><button onClick={()=>setVolume(volume?0:70)} aria-label="Mute">{volume?<Volume2 size={18}/>:<VolumeX size={18}/>}</button><input aria-label="Volume" type="range" min="0" max="100" value={volume} onChange={e=>setVolume(Number(e.target.value))} style={{'--progress':`${volume}%`} as React.CSSProperties}/><span>{volume}%</span></div></div>
     {/* Audio element events are attached once the browser creates the media element. */}
-    <AudioEvents audio={audio} playing={playing} onTime={setElapsed} onDuration={setDuration} onEnded={()=>{setPlaying(false);if(repeat && audio.current){audio.current.currentTime=0;void audio.current.play().then(()=>setPlaying(true)).catch(()=>setNotice('Playback failed.'));}else skip(1)}} onError={()=>{setPlaying(false);setNotice('Could not load audio.')}} />
+    <AudioEvents audio={audio} playing={playing} trackId={current.id} onTime={onTime} onDuration={setDuration} onEnded={()=>{setPlaying(false);if(repeat && audio.current){playback.current={seconds:0,last:0,completed:false,started:true};audio.current.currentTime=0;void audio.current.play().then(()=>setPlaying(true)).catch(()=>setNotice('Ошибка воспроизведения.'));}else void skip(1,true)}} onError={()=>{if(currentRef.current.video_id) void retryStream();else {setPlaying(false);setNotice('Не удалось загрузить аудио.');}}} />
     {notice && <div className="toast" role="status">{notice}<button onClick={()=>setNotice('')}><X size={16}/></button></div>}
     {authOpen && <div className="modal-backdrop" onClick={()=>setAuthOpen(false)}><div className="modal" onClick={e=>e.stopPropagation()}><button className="modal-close" onClick={()=>setAuthOpen(false)}><X size={19}/></button><span className="brand-icon"><AudioLines size={22}/></span><h2>Your music, everywhere.</h2><p>Sign in to save your favorites, create playlists, and upload your own tracks.</p><form onSubmit={signIn}><label htmlFor="email">EMAIL ADDRESS</label><input id="email" type="email" placeholder="you@example.com" value={email} onChange={e=>setEmail(e.target.value)} required/><button className="primary" disabled={busy}>{busy?'Sending...':'Send me a sign-in link'} <ArrowRight size={16}/></button></form><small>No password needed. We&apos;ll email you a magic link.</small></div></div>}
   </div>;
 }
 
-function AudioEvents({audio,playing,onTime,onDuration,onEnded,onError}:{audio:React.RefObject<HTMLAudioElement|null>;playing:boolean;onTime:(v:number)=>void;onDuration:(v:number)=>void;onEnded:()=>void;onError:()=>void}) {
-  useEffect(()=>{const a=audio.current;if(!a)return;const time=()=>onTime(a.currentTime);const duration=()=>onDuration(Number.isFinite(a.duration)?a.duration:0);a.addEventListener('timeupdate',time);a.addEventListener('durationchange',duration);a.addEventListener('ended',onEnded);a.addEventListener('error',onError);return()=>{a.removeEventListener('timeupdate',time);a.removeEventListener('durationchange',duration);a.removeEventListener('ended',onEnded);a.removeEventListener('error',onError)}},[audio,playing,onTime,onDuration,onEnded,onError]);
+function AudioEvents({audio,playing,trackId,onTime,onDuration,onEnded,onError}:{audio:React.RefObject<HTMLAudioElement|null>;playing:boolean;trackId:string;onTime:(v:number)=>void;onDuration:(v:number)=>void;onEnded:()=>void;onError:()=>void}) {
+  useEffect(()=>{const a=audio.current;if(!a)return;const time=()=>onTime(a.currentTime);const duration=()=>onDuration(Number.isFinite(a.duration)?a.duration:0);a.addEventListener('timeupdate',time);a.addEventListener('durationchange',duration);a.addEventListener('ended',onEnded);a.addEventListener('error',onError);return()=>{a.removeEventListener('timeupdate',time);a.removeEventListener('durationchange',duration);a.removeEventListener('ended',onEnded);a.removeEventListener('error',onError)}},[audio,playing,trackId,onTime,onDuration,onEnded,onError]);
   return null;
+}
+
+function Shelf({title,subtitle,items,onPlay,onRadio}:{title:string;subtitle:string;items:Track[];onPlay:(track:Track,list:Track[])=>void;onRadio:(track:Track)=>void}) {
+  if(!items.length) return null;
+  return <section className="shelf"><div className="section-heading"><div><h2>{title} <span>✳</span></h2><p>{subtitle}</p></div></div><div className="shelf-scroll">{items.map(t=><div className="catalog-card" key={t.id}><button className="catalog-card-main" onClick={()=>onPlay(t,items)}><span className="catalog-art" style={{backgroundImage:`url('${imageFor(t)}')`}}><span className="catalog-play"><Play size={17} fill="currentColor"/></span></span><b>{t.title}</b><small>{t.artist}</small></button><button className="radio-card" title="Запустить радио по треку" aria-label={`Радио: ${t.title}`} onClick={()=>onRadio(t)}><Radio size={15}/></button></div>)}</div></section>;
 }
