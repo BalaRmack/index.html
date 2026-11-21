@@ -13,7 +13,7 @@ test('Media Session controls the current YouTube queue and follows metadata and 
   const media={metadata:null as {title:string;artist:string;artwork:{src:string}[]}|null,playbackState:'none',setActionHandler:(name:string,fn:(()=>void)|null)=>{if(fn)handlers[name]=fn;else delete handlers[name]}};
   Object.defineProperty(dom.window.navigator,'mediaSession',{value:media,configurable:true});
   Object.assign(globalThis,{MediaMetadata:class {constructor(data:object){Object.assign(this,data)}}});
-  const tracks=[{id:'yt:abcdefghijk',video_id:'abcdefghijk',source:'youtube',title:'First',artist:'Artist One',storage_path:null},{id:'yt:zyxwvutsrqp',video_id:'zyxwvutsrqp',source:'youtube',title:'Second',artist:'Artist Two',storage_path:null}];
+  const tracks=[{id:'yt:abcdefghijk',video_id:'abcdefghijk',source:'youtube',title:'First',artist:'Artist One',storage_path:null},{id:'yt:zyxwvutsrqp',video_id:'zyxwvutsrqp',source:'youtube',title:'Second',artist:'Artist Two',storage_path:null},...Array.from({length:6},(_,i)=>({id:`yt:abcdefghij${i}`,video_id:`abcdefghij${i}`,source:'youtube',title:`Трек ${i+3}`,artist:'Исполнитель',storage_path:null}))];
   const originalFetch=globalThis.fetch;
   globalThis.fetch=(async()=>new Response(JSON.stringify({similar:tracks,recent:[],daily:[],trending:[]}))) as typeof fetch;
   let options:YT.PlayerOptions;let currentId='';let playCount=0,pauseCount=0,constructorCount=0;
@@ -23,9 +23,9 @@ test('Media Session controls the current YouTube queue and follows metadata and 
   const root=createRoot(dom.window.document.getElementById('root')!);
   try {
     await act(async()=>{root.render(React.createElement(HomePage));});
-    const cards=dom.window.document.querySelectorAll('.catalog-card-main');assert.equal(cards.length,2);
+    const cards=dom.window.document.querySelectorAll('.catalog-card-main');assert.equal(cards.length,8);assert.ok(dom.window.document.querySelector('[aria-label="Главная"]'));assert.ok(dom.window.document.querySelector('[aria-label="Поиск"]'));assert.ok(dom.window.document.body.textContent!.includes('Открыть медиатеку'));assert.equal(dom.window.document.querySelectorAll('.shelf-scroll .catalog-card').length,8);
     await act(async()=>{(cards[0] as HTMLElement).click();});
-    assert.equal(constructorCount,1);assert.deepEqual(loaded,['abcdefghijk']);assert.equal(media.metadata?.title,'First');assert.equal(media.metadata?.artist,'Artist One');assert.match(media.metadata!.artwork[0].src,/abcdefghijk/);assert.equal(media.playbackState,'playing');
+    assert.ok(dom.window.document.querySelector('.sidebar.has-video'));assert.ok(dom.window.document.querySelector('.main > .youtube-panel:not([hidden])'));assert.equal(constructorCount,1);assert.deepEqual(loaded,['abcdefghijk']);assert.equal(media.metadata?.title,'First');assert.equal(media.metadata?.artist,'Artist One');assert.match(media.metadata!.artwork[0].src,/abcdefghijk/);assert.equal(media.playbackState,'playing');
     await act(async()=>handlers.pause());assert.equal(media.playbackState,'paused');
     await act(async()=>handlers.play());assert.equal(media.playbackState,'playing');assert.equal(playCount,1);
     await act(async()=>handlers.nexttrack());assert.deepEqual(loaded,['abcdefghijk','zyxwvutsrqp']);assert.equal(media.metadata?.title,'Second');
