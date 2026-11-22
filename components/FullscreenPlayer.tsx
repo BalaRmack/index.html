@@ -116,29 +116,32 @@ export default function FullscreenPlayer({ player, onClose, mood, onMood, origin
         {player.prefs.particles !== 'off' && <WaveVisualizer playing={player.playing} mood={mood} accent={base} particles={player.prefs.particles} reduced={player.reduced} analyser={player.analyser} className="fp-canvas" />}
       </div>
 
-      <header className="fp-head">
+      <motion.header className="fp-head" initial={player.reduced ? false : { opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, transition: { duration: 0.1 } }} transition={{ duration: 0.32, delay: 0.16, ease: [0.22, 1, 0.36, 1] }}>
         <span className="panel-kicker">{player.contextLabel || t('playingNow')}</span>
         <div className="fp-head-actions">
           <button className="fp-mood" aria-label={t('waveMoodLabel')} onClick={() => setTab(tab === 'wave' ? 'lyrics' : 'wave')}>{tab === 'wave' ? t('lyrics') : t('waveMoodLabel')}</button>
           <button className="panel-close" aria-label={t('collapsePlayer')} title={t('collapsePlayer')} onClick={onClose}><X size={18} /></button>
         </div>
-      </header>
+      </motion.header>
 
       <div className="fp-grid">
         <section className="fp-left">
+          <motion.div initial={player.reduced ? false : { opacity: 0, scale: 0.9, y: 18 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.96, transition: { duration: 0.1 } }} transition={{ duration: 0.42, delay: 0.2, ease: [0.22, 1, 0.36, 1] }}>
           <motion.div
             className="fp-art"
             style={{ backgroundImage: current ? `url('${imageFor(current)}')` : undefined }}
             animate={player.playing && !player.reduced ? { scale: [1, 1.012, 1], y: [0, -4, 0] } : { scale: 1, y: 0 }}
             transition={{ duration: 7, repeat: player.playing && !player.reduced ? Infinity : 0, ease: 'easeInOut' }}
           />
-          <div className="fp-meta">
+          </motion.div>
+          <motion.div className="fp-meta" initial={player.reduced ? false : { opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, transition: { duration: 0.1 } }} transition={{ duration: 0.36, delay: 0.26, ease: [0.22, 1, 0.36, 1] }}>
             <h2>{current?.title || t('queueEmpty')}</h2>
             {current && (
               <button className="fp-artist" onClick={() => player.onOpenArtist(current.artist)}>{current.artist}</button>
             )}
           </div>
-          <div className="fp-progress">
+          </motion.div>
+          <motion.div className="fp-progress" initial={player.reduced ? false : { opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, transition: { duration: 0.1 } }} transition={{ duration: 0.36, delay: 0.3, ease: [0.22, 1, 0.36, 1] }}>
             <span>{formatDuration(player.elapsed)}</span>
             <input
               type="range"
@@ -152,7 +155,8 @@ export default function FullscreenPlayer({ player, onClose, mood, onMood, origin
             />
             <span>{formatDuration(player.duration)}</span>
           </div>
-          <div className="fp-controls">
+          </motion.div>
+          <motion.div className="fp-controls" initial={player.reduced ? false : { opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, transition: { duration: 0.1 } }} transition={{ duration: 0.36, delay: 0.34, ease: [0.22, 1, 0.36, 1] }}>
             {current && (
               <>
                 <LikeButton active={player.likes.includes(current.id)} label={player.likes.includes(current.id) ? t('unlike') : t('like')} reduced={player.reduced} size={20} onToggle={() => player.onToggleLike(current)} />
@@ -168,10 +172,11 @@ export default function FullscreenPlayer({ player, onClose, mood, onMood, origin
               ))}
             </span></LayoutGroup>
           </div>
-          <p className="fp-hint">{t('waveMoodHint')}</p>
+          </motion.div>
+          <motion.p className="fp-hint" initial={player.reduced ? false : { opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, transition: { duration: 0.08 } }} transition={{ duration: 0.32, delay: 0.38 }}>{t('waveMoodHint')}</motion.p>
         </section>
 
-        <section className="fp-right">
+        <motion.section className="fp-right" initial={player.reduced ? false : { opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, transition: { duration: 0.1 } }} transition={{ duration: 0.4, delay: 0.25, ease: [0.22, 1, 0.36, 1] }}>
           <LayoutGroup id="fp-right-tabs"><div className="fp-tabs" role="tablist">
             <button role="tab" aria-selected={tab === 'lyrics'} className={tab === 'lyrics' ? 'on' : undefined} onClick={() => setTab('lyrics')}>{tab === 'lyrics' && <motion.span layoutId="fp-tab-pill" className="fp-tab-pill" transition={{ type: 'spring', stiffness: 380, damping: 30 }} />}<span className="fp-tab-label"><ListMusic size={14} /> {t('lyrics')}</span></button>
             <button role="tab" aria-selected={tab === 'wave'} className={tab === 'wave' ? 'on' : undefined} onClick={() => setTab('wave')}>{tab === 'wave' && <motion.span layoutId="fp-tab-pill" className="fp-tab-pill" transition={{ type: 'spring', stiffness: 380, damping: 30 }} />}<span className="fp-tab-label">{t('waveMoodLabel')}</span></button>
@@ -217,7 +222,7 @@ export default function FullscreenPlayer({ player, onClose, mood, onMood, origin
               </div></LayoutGroup>
             </div>
           )}
-        </section>
+        </motion.section>
       </div>
       <AnimatePresence />
     </motion.div>
