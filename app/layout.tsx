@@ -26,7 +26,8 @@ const BOOTSTRAP = `(function(){try{
     nocturne:['#b7e49a','#8fcf7f','#12200f','#111a13','rgba(183,228,154,.22)'],
                     violet:['#c9b6ff','#a68cff','#181226','#140e24','rgba(201,182,255,.22)'],
                     amber:['#f7d199','#f0b46a','#21190f','#1f1508','rgba(247,209,153,.22)'],
-                    ice:['#a9d8ff','#7fc0ff','#101b24','#0c1924','rgba(169,216,255,.22)']
+                    ice:['#a9d8ff','#7fc0ff','#101b24','#0c1924','rgba(169,216,255,.22)'],
+  mono:['#f2f2f2','#ffffff','#141414','#0a0a0a','rgba(255,255,255,.16)']
   };
   var a=accents[p.accent]||accents.nocturne;
   root.style.setProperty('--green',a[0]);

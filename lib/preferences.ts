@@ -5,7 +5,7 @@
 export const PREFERENCES_KEY = 'nocturne.preferences.v1';
 
 export type Language = 'ru' | 'en';
-export type Accent = 'nocturne' | 'violet' | 'amber' | 'ice';
+export type Accent = 'nocturne' | 'violet' | 'amber' | 'ice' | 'mono';
 export type GlassLevel = 'off' | 'soft' | 'full';
 export type ParticlesMode = 'full' | 'eco' | 'off';
 export type SidebarLayout = 'classic' | 'compact';
@@ -52,6 +52,7 @@ export const ACCENTS: Record<Accent, { label: string; labelEn: string; green: st
   violet: { label: 'Глубокий фиолетовый', labelEn: 'Deep violet', green: '#c9b6ff', hi: '#e2d6ff', ink: '#1b1430', glow: 'rgba(201,182,255,.20)', deep: '#180f2c' },
   amber: { label: 'Тёплый янтарный', labelEn: 'Warm amber', green: '#f7d199', hi: '#ffe7c2', ink: '#2a1b06', glow: 'rgba(247,209,153,.18)', deep: '#261604' },
   ice: { label: 'Ледяной синий', labelEn: 'Ice blue', green: '#a9d8f2', hi: '#d3ecff', ink: '#0d2029', glow: 'rgba(169,216,242,.20)', deep: '#082031' },
+  mono: { label: 'Чёрно-белая', labelEn: 'Monochrome', green: '#f2f2f2', hi: '#ffffff', ink: '#0a0a0a', glow: 'rgba(255,255,255,.16)', deep: '#141414' },
 };
 
 export const GENRES: { id: string; ru: string; en: string; query: string }[] = [
@@ -94,7 +95,7 @@ export function sanitizePreferences(raw: unknown): Preferences {
   const genres = listOfStrings(value.genres, GENRES.length, 40).filter((genre) => GENRES.some((item) => item.id === genre));
   return {
     language: oneOf(value.language, ['ru', 'en'] as const, DEFAULT_PREFERENCES.language),
-    accent: oneOf(value.accent, ['nocturne', 'violet', 'amber', 'ice'] as const, DEFAULT_PREFERENCES.accent),
+    accent: oneOf(value.accent, ['nocturne', 'violet', 'amber', 'ice', 'mono'] as const, DEFAULT_PREFERENCES.accent),
     glass: oneOf(value.glass, ['off', 'soft', 'full'] as const, DEFAULT_PREFERENCES.glass),
     particles: oneOf(value.particles, ['full', 'eco', 'off'] as const, DEFAULT_PREFERENCES.particles),
     sidebar: oneOf(value.sidebar, ['classic', 'compact'] as const, DEFAULT_PREFERENCES.sidebar),

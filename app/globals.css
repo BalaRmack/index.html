@@ -553,3 +553,9 @@ button.wide{display:inline-flex;gap:8px;align-items:center;padding:10px 12px;bor
 .volume-control:hover .volume-slider::-moz-range-thumb,.volume-slider:focus-visible::-moz-range-thumb,.volume-slider:active::-moz-range-thumb{opacity:1;transform:scale(1)}
 .volume-pct{min-width:34px;text-align:right;font-variant-numeric:tabular-nums;font-size:12px;opacity:.75}
 @media(max-width:760px){.volume-slider{width:54px}.volume-pct{display:none}}
+
+/* Strict black-and-white palette without green tint */
+html[data-accent="mono"],html[data-accent="mono"] body{background:#090909!important;color:#f5f5f5}
+html[data-accent="mono"] .sidebar,html[data-accent="mono"] .player,html[data-accent="mono"] .modal,html[data-accent="mono"] .now-panel,html[data-accent="mono"] .queue-panel{background:rgba(16,16,16,.92)!important;border-color:rgba(255,255,255,.12)!important}
+html[data-accent="mono"] .hero{background:radial-gradient(circle at 20% 0%,rgba(255,255,255,.08),transparent 55%),linear-gradient(180deg,rgba(24,24,24,.9),rgba(10,10,10,.96))!important;border-color:rgba(255,255,255,.12)!important}
+html[data-accent="mono"] .card,html[data-accent="mono"] .chip,html[data-accent="mono"] .segmented,html[data-accent="mono"] .search-wrap{background:rgba(255,255,255,.05)!important;border-color:rgba(255,255,255,.1)!important}
