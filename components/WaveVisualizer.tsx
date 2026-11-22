@@ -76,9 +76,9 @@ export default function WaveVisualizer({ playing, mood, accent, particles = 'ful
       ctx.globalCompositeOperation = 'lighter';
 
       const clouds: readonly [number, number, number, number, RGB, number][] = [
-        [time * 0.32 * spd, 0.22, 1.45 + bass * 0.25, 1.15 + energy * 0.2, mid, 0.38 + energy * 0.14],
-        [-time * 0.25 * spd + 2.1, 0.28, 1.3 + energy * 0.22, 1.4 + bass * 0.22, outer, 0.32 + bass * 0.14],
-        [time * 0.38 * spd + 4.2, 0.16, 1.1 + bass * 0.26, 1.1 + energy * 0.22, core, 0.45 + energy * 0.16],
+        [time * 0.32 * spd, 0.22, 1.45 + bass * 0.25, 1.15 + energy * 0.2, mid, 0.24 + energy * 0.09],
+        [-time * 0.25 * spd + 2.1, 0.28, 1.3 + energy * 0.22, 1.4 + bass * 0.22, outer, 0.20 + bass * 0.09],
+        [time * 0.38 * spd + 4.2, 0.16, 1.1 + bass * 0.26, 1.1 + energy * 0.22, core, 0.26 + energy * 0.10],
         [-time * 0.45 * spd + 1.1, 0.32, 0.95, 1.2, spark, 0.22 + energy * 0.1],
       ];
 
@@ -108,7 +108,7 @@ export default function WaveVisualizer({ playing, mood, accent, particles = 'ful
           const len = R * (1.35 + 0.4 * Math.sin(time * 1.3 * spd + i * 1.9) + bass * 0.4);
           const sp = 0.16 + 0.06 * Math.cos(time + i);
           const g = ctx.createRadialGradient(cx, cy, R * 0.08, cx, cy, len);
-          g.addColorStop(0, rgba(i % 2 ? mid : core, 0.22 + energy * 0.14));
+          g.addColorStop(0, rgba(i % 2 ? mid : core, 0.14 + energy * 0.09));
           g.addColorStop(0.55, rgba(outer, 0.08 + bass * 0.06));
           g.addColorStop(1, 'rgba(0,0,0,0)');
           ctx.fillStyle = g;
@@ -122,8 +122,8 @@ export default function WaveVisualizer({ playing, mood, accent, particles = 'ful
 
       const cR = R * (0.58 + bass * 0.2);
       const cg = ctx.createRadialGradient(cx, cy, 0, cx, cy, cR);
-      cg.addColorStop(0, rgba([255, 255, 255], 0.22 + bass * 0.16));
-      cg.addColorStop(0.45, rgba(core, 0.34 + energy * 0.16));
+      cg.addColorStop(0, rgba([255, 255, 255], 0.07 + bass * 0.06));
+      cg.addColorStop(0.45, rgba(core, 0.18 + energy * 0.09));
       cg.addColorStop(1, 'rgba(0,0,0,0)');
       ctx.fillStyle = cg;
       ctx.beginPath();
