@@ -34,7 +34,7 @@ export function resolveVolume(options: {
   remote?: boolean;
   fade?: number;
 }): number {
-  const base = Math.max(0, Math.min(100, Number(options.volume) || 0)) / 100;
+  const base = Math.max(0, Math.min(100, Number(options.volume) || 0)) / 100, 2.2;
   const fade = Math.max(0, Math.min(1, options.fade ?? 1));
   let value = base;
   if (options.normalize) {
