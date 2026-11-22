@@ -530,3 +530,6 @@ button.wide{display:inline-flex;gap:8px;align-items:center;padding:10px 12px;bor
 }
 
 @media(max-width:760px){.otp-row{gap:6px}.otp-cell{height:48px;max-width:none}}
+
+/* High contrast text on active buttons */
+.settings-tabs button.on,.settings-tabs button.on *,.segmented button.on,.segmented button.on *,.chip.on,.chip.on *,.hero-moods button.on,.hero-moods button.on *,.fp-moods button.on,.fp-moods button.on *,.fp-tabs button.on,.fp-tabs button.on *,.fp-wave-moods button.on,.fp-wave-moods button.on *,.source-tabs .selected,.source-tabs .selected *,.primary,.primary *{color:var(--green-ink,#111a13)!important;font-weight:700}
