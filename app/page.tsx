@@ -498,6 +498,17 @@ export default function HomePage() {
                 if (user && supabase) {
                   void supabase.from('tracks').update({ video_id: track.video_id, duration: track.duration, artwork: track.thumbnail || null }).eq('id', track.id).eq('owner_id', user.id);
                 }
+              } else {
+                const dzRes = await fetch(`/api/catalog/alternative/search?source=deezer&q=${encodeURIComponent(`${track.artist} ${track.title}`)}`);
+                if (dzRes.ok) {
+                  const dzData = await dzRes.json();
+                  const dzList = Array.isArray(dzData?.tracks) ? dzData.tracks : [];
+                  const dzHit = dzList.find((c: Track) => (c.external_id || c.id?.startsWith('dz:')) && c.title.toLowerCase().includes(tLow) && c.artist.toLowerCase().includes(aLow));
+                  const dzId = dzHit?.external_id || (dzHit?.id?.startsWith('dz:') ? dzHit.id.slice(3) : null);
+                  if (dzId) {
+                    track = { ...track, video_id: null, source: 'deezer', external_id: dzId, duration: dzHit.duration || 30, thumbnail: dzHit.thumbnail || track.thumbnail };
+                  }
+                }
               }
             }
           } catch {}
