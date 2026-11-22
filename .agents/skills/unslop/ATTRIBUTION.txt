@@ -1,0 +1,3 @@
+Unslop, by Damir Sokolovsky (https://heydamir.design/unslop), CC BY 4.0.
+Source: https://github.com/heydamir/unslop/tree/5cd3b65ceed91782f9d339d3d2eff834fdaf5495/skills/unslop
+Skill files are unmodified; LICENSE and this attribution file were added.
