@@ -453,31 +453,23 @@ export default function HomePage() {
         if (audio.current!.paused) { if (ctx.current && !track.video_id) await ctx.current.resume(); await audio.current!.play(); playback.current.started = true; setPlaying(true); } else { audio.current!.pause(); setPlaying(false); } return;
       }
       if (playback.current.started && currentRef.current?.id !== track.id) recordSwitch();
-      // Если в библиотеке сохранён слишком длинный/чужой ролик (например > 3:30 для короткого трека), подтягиваем точный оригинал по артисту и названию
+      // Если у трека кривой/длинный video_id (например > 3:30) или он из каталога — проверяем чистый студийный оригинал в Deezer
       if (track.video_id && track.artist && track.title && (track.duration || 0) > 210) {
         try {
-          const q = encodeURIComponent(`${track.artist} - ${track.title}`);
-          const res = await fetch(`/api/catalog/search?q=${q}`);
+          const q = encodeURIComponent(`${track.artist} ${track.title}`);
+          const res = await fetch(`/api/catalog/search?source=deezer&q=${q}`);
           if (res.ok) {
             const data = await res.json();
             const list = Array.isArray(data?.tracks) ? data.tracks : [];
             const aLow = track.artist.toLowerCase();
             const tLow = track.title.toLowerCase();
-            const exact = list.find((c: Track) =>
-              c.video_id &&
-              c.video_id !== track.video_id &&
-              (c.duration || 0) > 45 &&
-              (c.duration || 0) < 210 &&
+            const dz = list.find((c: Track) =>
+              c.url &&
               c.title.toLowerCase().includes(tLow) &&
-              (c.artist.toLowerCase().includes(aLow) || c.title.toLowerCase().includes(aLow)) &&
-              !/(remix|nightcore|slowed|sped|cover|mashup)/i.test(c.title)
+              c.artist.toLowerCase().includes(aLow)
             );
-            if (exact?.video_id) {
-              track = { ...track, video_id: exact.video_id, duration: exact.duration || track.duration, thumbnail: exact.thumbnail || track.thumbnail };
-              setTracks((prev) => prev.map((x) => (x.id === track.id ? track : x)));
-              if (user && supabase) {
-                void supabase.from('tracks').update({ video_id: track.video_id, duration: track.duration, artwork: track.thumbnail || null }).eq('id', track.id).eq('owner_id', user.id);
-              }
+            if (dz?.url) {
+              track = { ...track, video_id: null, source: 'deezer', url: dz.url, duration: dz.duration || 30, thumbnail: dz.thumbnail || track.thumbnail };
             }
           }
         } catch {}
@@ -570,7 +562,25 @@ export default function HomePage() {
     setPlaying(false); say('noticeQueueEnd');
   }
   // Все варианты тоже закрыты: одна короткая строка вместо ошибки и уходим на следующий трек.
-  embedGiveUp.current.onExhausted = () => { say('noticeEmbedFallback'); void skip(1, true); };
+  embedGiveUp.current.onExhausted = async (failed) => {
+    try {
+      const q = encodeURIComponent(`${failed.artist || ''} ${failed.title}`.trim());
+      const res = await fetch(`/api/catalog/search?source=deezer&q=${q}`);
+      if (res.ok) {
+        const data = await res.json();
+        const list = Array.isArray(data?.tracks) ? data.tracks : [];
+        const tLow = failed.title.toLowerCase();
+        const aLow = (failed.artist || '').toLowerCase();
+        const dz = list.find((c: Track) => c.url && c.title.toLowerCase().includes(tLow) && (!aLow || c.artist.toLowerCase().includes(aLow)));
+        if (dz?.url && currentRef.current) {
+          void playTrack({ ...currentRef.current, video_id: null, source: 'deezer', url: dz.url, duration: dz.duration || 30 }, undefined, true);
+          return;
+        }
+      }
+    } catch {}
+    say('noticeEmbedFallback');
+    void skip(1, true);
+  };
   const mediaActions = useRef({ play: () => { }, pause: () => { }, nexttrack: () => { }, previoustrack: () => { } });
   mediaActions.current = {
     play: () => { if (soundcloudUrl) return; const track = currentRef.current; if (!track) return; if (track.video_id && youtubeActive) yt.current?.play(); else if (!playing) void playTrack(track); },
