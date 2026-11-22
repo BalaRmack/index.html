@@ -170,10 +170,16 @@ export default function FullscreenPlayer({ player, onClose, mood, onMood }: {
         </section>
 
         <section className="fp-right">
-          <div className="fp-tabs" role="tablist">
-            <button role="tab" aria-selected={tab === 'lyrics'} className={tab === 'lyrics' ? 'on' : undefined} onClick={() => setTab('lyrics')}><ListMusic size={14} /> {t('lyrics')}</button>
-            <button role="tab" aria-selected={tab === 'wave'} className={tab === 'wave' ? 'on' : undefined} onClick={() => setTab('wave')}>{t('waveMoodLabel')}</button>
-          </div>
+          <LayoutGroup id="fp-tabs-group">
+            <div className="fp-tabs" role="tablist">
+              {([['lyrics', t('lyrics')], ['mood', t('waveMood')]] as const).map(([id, label]) => (
+                <button key={id} type="button" role="tab" aria-selected={rightTab === id} className={rightTab === id ? 'on' : undefined} onClick={() => setRightTab(id)}>
+                  {rightTab === id && <motion.span layoutId="fp-tab-pill" className="fp-tab-pill" transition={{ type: 'spring', stiffness: 380, damping: 30 }} />}
+                  <span className="fp-tab-label">{label}</span>
+                </button>
+              ))}
+            </div>
+          </LayoutGroup>
           {tab === 'lyrics' ? (
             <div className="fp-lyrics" ref={scroller}>
               {loading && <p className="panel-muted">{t('lyricsLoading')}</p>}
