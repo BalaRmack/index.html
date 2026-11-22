@@ -464,12 +464,12 @@ export default function HomePage() {
             const aLow = track.artist.toLowerCase();
             const tLow = track.title.toLowerCase();
             const dz = list.find((c: Track) =>
-              c.url &&
+              c.preview_url &&
               c.title.toLowerCase().includes(tLow) &&
               c.artist.toLowerCase().includes(aLow)
             );
-            if (dz?.url) {
-              track = { ...track, video_id: null, source: 'deezer', url: dz.url, duration: dz.duration || 30, thumbnail: dz.thumbnail || track.thumbnail };
+            if (dz?.preview_url) {
+              track = { ...track, video_id: null, source: 'deezer', preview_url: dz.preview_url, duration: dz.duration || 30, thumbnail: dz.thumbnail || track.thumbnail };
             }
           }
         } catch {}
@@ -562,7 +562,9 @@ export default function HomePage() {
     setPlaying(false); say('noticeQueueEnd');
   }
   // Все варианты тоже закрыты: одна короткая строка вместо ошибки и уходим на следующий трек.
-  embedGiveUp.current.onExhausted = async (failed) => {
+  embedGiveUp.current.onExhausted = async () => {
+    const failed = currentRef.current;
+    if (!failed) { say('noticeEmbedFallback'); void skip(1, true); return; }
     try {
       const q = encodeURIComponent(`${failed.artist || ''} ${failed.title}`.trim());
       const res = await fetch(`/api/catalog/search?source=deezer&q=${q}`);
@@ -571,9 +573,9 @@ export default function HomePage() {
         const list = Array.isArray(data?.tracks) ? data.tracks : [];
         const tLow = failed.title.toLowerCase();
         const aLow = (failed.artist || '').toLowerCase();
-        const dz = list.find((c: Track) => c.url && c.title.toLowerCase().includes(tLow) && (!aLow || c.artist.toLowerCase().includes(aLow)));
-        if (dz?.url && currentRef.current) {
-          void playTrack({ ...currentRef.current, video_id: null, source: 'deezer', url: dz.url, duration: dz.duration || 30 }, undefined, true);
+        const dz = list.find((c: Track) => c.preview_url && c.title.toLowerCase().includes(tLow) && (!aLow || c.artist.toLowerCase().includes(aLow)));
+        if (dz?.preview_url && currentRef.current) {
+          void playTrack({ ...currentRef.current, video_id: null, source: 'deezer', preview_url: dz.preview_url, duration: dz.duration || 30 }, undefined, true);
           return;
         }
       }
