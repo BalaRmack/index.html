@@ -77,7 +77,7 @@ export default function HomePage() {
   const [loading, setLoading] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [volume, setVolume] = useState(70);
+  const [volume, setVolume] = useState(() => { try { const v = Number(localStorage.getItem('nocturne.volume.v1')); return Number.isFinite(v) && v >= 0 && v <= 100 ? v : 70; } catch { return 70; } });
   const [muted, setMuted] = useState(false);
   const [shuffle, setShuffle] = useState(false);
   const [repeat, setRepeat] = useState(false);
@@ -350,7 +350,7 @@ export default function HomePage() {
     void load(); return () => { disposed = true; clearTimeout(timer); controller.abort(); };
   }, [user, refreshShelves, prefs.artists.join('|'), prefs.genres.join('|'), t]);
   useEffect(() => { yt.current?.cue(!shuffle ? embed.playbackId(queue.current[queueIndex.current + 1]?.video_id) || null : null); }, [shuffle, youtubeActive, embed]);
-  useEffect(() => { applyLevel(); }, [volume, muted, applyLevel]);
+  useEffect(() => { applyLevel(); try { localStorage.setItem('nocturne.volume.v1', String(volume)); } catch {} }, [volume, muted, applyLevel]);
   useEffect(() => { applyLevel(); }, [prefs.normalizeVolume, applyLevel]);
   // Кроссфейд: трек плавно вступает, а перед концом так же плавно уходит в тишину.
   useEffect(() => {
@@ -933,9 +933,11 @@ export default function HomePage() {
           <button className={panel === 'queue' ? 'on' : ''} aria-label={t('queue')} title={t('queue')} onClick={() => setPanel(panel === 'queue' ? null : 'queue')}><ListMusic size={18} /></button>
           <button className={panel === 'now' ? 'on' : ''} aria-label={t('nowPlayingPanel')} title={t('nowPlayingPanel')} onClick={() => setPanel(panel === 'now' ? null : 'now')}><PanelRight size={18} /></button>
           <button aria-label={current ? t('expandPlayer') : t('queueEmpty')} title={t('expandPlayer')} disabled={!current} onClick={() => setFullscreen(true)}><SquarePlay size={18} /></button>
-          <VolumeButton muted={muted || volume === 0} label={muted || volume === 0 ? t('unmute') : t('mute')} reduced={reducedMotion} onClick={toggleMute} />
-          <input aria-label={t('volume')} type="range" min="0" max="100" value={muted ? 0 : volume} onChange={(e) => { setMuted(false); setVolume(Number(e.target.value)); }} style={{ '--progress': `${muted ? 0 : volume}%` } as React.CSSProperties} />
-          <span>{muted ? 0 : volume}%</span>
+          <div className="volume-control" onWheel={(e) => { e.preventDefault(); const next = Math.max(0, Math.min(100, (muted ? 0 : volume) + (e.deltaY < 0 ? 5 : -5))); setMuted(next === 0); setVolume(next); }}>
+            <VolumeButton muted={muted || volume === 0} label={muted || volume === 0 ? t('unmute') : t('mute')} reduced={reducedMotion} onClick={toggleMute} />
+            <input className="volume-slider" aria-label={t('volume')} type="range" min="0" max="100" value={muted ? 0 : volume} onChange={(e) => { const v = Number(e.target.value); setMuted(v === 0); setVolume(v); }} style={{ '--progress': `${muted ? 0 : volume}%` } as React.CSSProperties} />
+            <span className="volume-pct">{muted ? 0 : volume}%</span>
+          </div>
         </div>
       </footer>
       <nav className="mobile-nav" aria-label={t('navigation')}>
