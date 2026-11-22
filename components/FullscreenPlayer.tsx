@@ -1,5 +1,5 @@
-import { LayoutGroup } from 'framer-motion';
 'use client';
+import { LayoutGroup } from 'framer-motion';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
