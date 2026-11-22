@@ -464,12 +464,12 @@ export default function HomePage() {
             const aLow = track.artist.toLowerCase();
             const tLow = track.title.toLowerCase();
             const dz = list.find((c: Track) =>
-              c.preview_url &&
+              c.external_id &&
               c.title.toLowerCase().includes(tLow) &&
               c.artist.toLowerCase().includes(aLow)
             );
-            if (dz?.preview_url) {
-              track = { ...track, video_id: null, source: 'deezer', preview_url: dz.preview_url, duration: dz.duration || 30, thumbnail: dz.thumbnail || track.thumbnail };
+            if (dz?.external_id) {
+              track = { ...track, video_id: null, source: 'deezer', external_id: dz.external_id, duration: dz.duration || 30, thumbnail: dz.thumbnail || track.thumbnail };
             }
           }
         } catch {}
@@ -573,9 +573,9 @@ export default function HomePage() {
         const list = Array.isArray(data?.tracks) ? data.tracks : [];
         const tLow = failed.title.toLowerCase();
         const aLow = (failed.artist || '').toLowerCase();
-        const dz = list.find((c: Track) => c.preview_url && c.title.toLowerCase().includes(tLow) && (!aLow || c.artist.toLowerCase().includes(aLow)));
-        if (dz?.preview_url && currentRef.current) {
-          void playTrack({ ...currentRef.current, video_id: null, source: 'deezer', preview_url: dz.preview_url, duration: dz.duration || 30 }, undefined, true);
+        const dz = list.find((c: Track) => c.external_id && c.title.toLowerCase().includes(tLow) && (!aLow || c.artist.toLowerCase().includes(aLow)));
+        if (dz?.external_id && currentRef.current) {
+          void playTrack({ ...currentRef.current, video_id: null, source: 'deezer', external_id: dz.external_id, duration: dz.duration || 30 }, undefined, true);
           return;
         }
       }
