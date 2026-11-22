@@ -621,6 +621,7 @@ export default function HomePage() {
       const { error } = exists ? await supabase.from('likes').delete().eq('user_id', user.id).eq('track_id', id) : await supabase.from('likes').insert({ user_id: user.id, track_id: id });
       if (error) throw error;
       setLikes((prev) => (exists ? prev.filter((x) => x !== track.id) : [...prev, track.id]));
+      if (exists && !track.storage_path) setTracks((prev) => prev.filter((x) => x.id !== track.id));
       if (!exists) void logSignal(track, 'like');
     } catch (e) { setNotice(e instanceof Error ? e.message : tRef.current('noticeLikeFailed')); }
   }, [user, say]);
