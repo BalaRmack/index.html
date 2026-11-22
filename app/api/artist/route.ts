@@ -46,7 +46,7 @@ export async function GET(req: Request) {
   );
 
   const wiki = withTimeout(
-    readJson(wikipediaUrl(name, lang), 2400).then((payload) => parseWikipedia(payload, name, lang)),
+    readJson(wikipediaUrl(name, lang), 2400).then((payload) => parseWikipedia(payload, name, lang)).catch(() => ({ biography: '', url: null, thumbnail: null })),
     2600,
     { biography: '', url: null, thumbnail: null },
   );

@@ -18,7 +18,8 @@ export function useArtistInfo(name: string | undefined, language: string) {
   useEffect(() => {
     const artist = (name || '').trim();
     if (artist.length < 2) { setInfo(null); setFailed(false); return; }
-    const cached = artistCache.get(artist.toLowerCase());
+    const cacheKey = `${language.startsWith('en') ? 'en' : 'ru'}:${artist.toLowerCase()}`;
+    const cached = artistCache.get(cacheKey);
     if (cached) { setInfo(cached); setFailed(false); return; }
     const controller = new AbortController();
     let alive = true;
@@ -47,7 +48,7 @@ export function useArtistInfo(name: string | undefined, language: string) {
             .filter((row: any) => typeof row?.id === 'string' && typeof row?.title === 'string' && typeof row?.artist === 'string')
             .slice(0, 6),
         };
-        artistCache.set(artist.toLowerCase(), view);
+        artistCache.set(cacheKey, view);
         setInfo(view);
       })
       .catch((error) => { if (alive && (error as Error)?.name !== 'AbortError') setFailed(true); });

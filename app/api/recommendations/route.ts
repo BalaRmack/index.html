@@ -166,8 +166,8 @@ async function handle(req: Request, guest?: { taste?: Taste; blocks: Block[]; se
   const shelves = {
     similar: diverseRecommendations(related.tracks, blocked, top?.video_id ? [top.video_id] : [], recent.recordings, '', 12),
     recent: cleanRecommendations(permitted(recentTracks), profile.excluded).slice(0, 12),
-    daily: diverseRecommendations(permitted(daily), blocked, [], recent.recordings, '', 12),
-    trending: diverseRecommendations(permitted(trends.flatMap(x => x.tracks)), blocked, [], recent.recordings, '', 16),
+    daily: diverseRecommendations(shuffled(permitted(daily)), blocked, [], recent.recordings, '', 12),
+    trending: diverseRecommendations(shuffled(permitted(trends.flatMap(x => x.tracks))), blocked, [], recent.recordings, '', 16),
   };
   const before = shelves.daily.length + shelves.trending.length;
   // Пустые публичные полки мгновенно дозаполняются свежими миксами (или редакционным резервом).

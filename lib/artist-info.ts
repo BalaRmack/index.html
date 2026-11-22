@@ -71,8 +71,10 @@ export function parseDeezerSimilar(payload: unknown, limit = 8): { name: string;
 
 /** Ответ Википедии (generator=search + extracts + pageimages) → краткая справка, ссылка и превью. */
 export function parseWikipedia(payload: unknown, wanted: string, language: 'ru' | 'en' = 'en'): { biography: string; url: string | null; thumbnail: string | null } {
-  const pages = Object.values(obj(obj(payload).query).pages || {}).map(obj);
-  if (!pages.length) return { biography: '', url: null, thumbnail: null };
+  const rawPages = Object.values(obj(obj(payload).query).pages || {}).map(obj);
+  if (!rawPages.length) return { biography: '', url: null, thumbnail: null };
+  const withText = rawPages.filter((page) => text(page.extract, 1400).length > 20);
+  const pages = withText.length ? withText : rawPages;
   const target = key(wanted);
   const best =
     pages.find((page) => key(text(page.title, 300)).startsWith(target)) ||

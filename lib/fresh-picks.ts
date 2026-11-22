@@ -118,7 +118,7 @@ export async function freshArtistMix(limit = 16, timeoutMs = MIX_TIMEOUT_MS): Pr
     );
     if (deezer.length) return deezer.map(toFresh);
     const youtube = await withTimeout(
-      searchCatalog(`${artist} music`).then((result) => asTracks(result.value).slice(0, 2)),
+      searchCatalog(`${artist} music`).then((result) => asTracks(result.value).slice(0, 2).map((track) => ({ ...track, artist: !track.artist || track.artist === 'Unknown artist' ? artist : track.artist }))),
       timeoutMs,
       [] as CatalogTrack[],
     );

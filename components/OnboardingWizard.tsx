@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { ArrowLeft, ArrowRight, Check, LayoutGrid, Music2, Palette, Sparkles, Volume2, X } from 'lucide-react';
 import { ACCENTS, GENRES, ONBOARDING_ARTISTS, type Accent, type GlassLevel, type Language, type NowPlayingMode, type ParticlesMode, type PlayerStyle, type Preferences, type SidebarLayout } from '@/lib/preferences';
@@ -30,18 +30,14 @@ function LayoutPreview({ prefs, direction }: { prefs: Preferences; direction: nu
         <span className="preview-dot" />
         {!compact && [0, 1, 2].map((row) => <span key={row} className="preview-line" />)}
       </motion.aside>
-      <motion.div layout className="preview-content">
+      <motion.div layout className="preview-content" style={{ flexDirection: panelLeft ? 'row-reverse' : 'row' }}>
         <div className="preview-cards">
           {[0, 1, 2, 3].map((card) => <motion.span key={card} layout className="preview-card" animate={{ opacity: [0.6, 1, 0.6][card % 3] }} transition={{ duration: 3 + card, repeat: 2, ease: 'easeInOut' }} />)}
         </div>
-        <Presence reduced={reduced} initial={false}>
-          {!panelLeft && (
-            <motion.aside key="panel" className="preview-panel" initial={{ opacity: 0, x: direction >= 0 ? 18 : 0 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 18 }} transition={spring}>
-              <span className="preview-art" />
-              <span className="preview-line short" />
-            </motion.aside>
-          )}
-        </Presence>
+        <motion.aside layout key="panel" className="preview-panel" transition={spring}>
+          <span className="preview-art" />
+          <span className="preview-line short" />
+        </motion.aside>
       </motion.div>
       <motion.div layout className={`preview-player${prefs.playerStyle === 'floating' ? ' is-floating' : ''}`} transition={spring} />
     </motion.div>
@@ -72,6 +68,7 @@ export default function OnboardingWizard({ prefs, setPref, t, reduced, onDone, o
   const steps = useMemo(() => ['language', 'appearance', 'layout', 'sound', 'taste'] as const, []);
   const total = steps.length;
   const go = (next: number) => { setDirection(next > step ? 1 : -1); setStep(Math.max(0, Math.min(total - 1, next))); };
+  useEffect(() => { const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onSkip(); }; window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey); }, [onSkip]);
 
   const toggleGenre = (id: string) => {
     const next = prefs.genres.includes(id) ? prefs.genres.filter((item) => item !== id) : [...prefs.genres, id].slice(0, GENRES.length);

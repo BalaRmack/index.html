@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Moon, RotateCcw, Trash2, X } from 'lucide-react';
 import type { PlayerBindings } from '@/lib/types';
@@ -74,6 +74,7 @@ export default function SettingsPanel({ player, prefs, setPref, blocks, onUnbloc
   const t = player.t;
   const [section, setSection] = useState<'playback' | 'appearance' | 'reco' | 'profile'>('appearance');
   const [name, setName] = useState(displayName);
+  useEffect(() => { setName(displayName); }, [displayName]);
 
   return (
     <motion.aside
@@ -164,8 +165,7 @@ export default function SettingsPanel({ player, prefs, setPref, blocks, onUnbloc
               options={[{ value: 0, label: t('crossfadeOff') }, { value: 3, label: t('seconds', { value: 3 }) }, { value: 6, label: t('seconds', { value: 6 }) }, { value: 12, label: t('seconds', { value: 12 }) }]}
               onChange={(value) => setPref('crossfade', Number(value))}
             />
-            <p className="settings-note">{t('normalizeHint')}</p>
-          </>
+            </>
         )}
 
         {section === 'reco' && (
@@ -192,7 +192,7 @@ export default function SettingsPanel({ player, prefs, setPref, blocks, onUnbloc
             {prefs.artists.length > 0 && (
               <div className="setting-row setting-stack">
                 <span className="setting-label">{t('artistsLabelPick')}</span>
-                <div className="chip-row">{prefs.artists.map((artist) => <button key={artist} onClick={() => player.onOpenArtist(artist)}>{artist}</button>)}</div>
+                <div className="chip-row">{prefs.artists.map((artist) => <button key={artist} onClick={() => { onClose(); player.onOpenArtist(artist); }}>{artist}</button>)}</div>
               </div>
             )}
             <div className="setting-row setting-stack">

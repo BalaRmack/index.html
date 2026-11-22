@@ -390,6 +390,16 @@ export default function HomePage() {
     if (typeof window !== 'undefined' && window.innerWidth <= 980) return;
     setPanel('now');
   }, [current?.id, playing, prefs.nowPlaying]);
+  useEffect(() => {
+    if (!notice) return;
+    const id = setTimeout(() => { setNotice(''); setLastBlocked(null); }, 4500);
+    return () => clearTimeout(id);
+  }, [notice]);
+  useEffect(() => {
+    const v = new URLSearchParams(window.location.search).get('view');
+    if (v === 'liked') setView('liked');
+    else if (v === 'wave') void startWave();
+  }, []);
   useEffect(() => () => { ++requestSeq.current; audio.current?.pause(); void ctx.current?.close(); }, []);
 
   async function authHeaders() { const session = await supabase?.auth.getSession(); const token = session?.data.session?.access_token; return token ? { Authorization: `Bearer ${token}` } : undefined; }
@@ -811,8 +821,9 @@ export default function HomePage() {
           <div className="search-wrap"><Search size={17} /><input id="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('searchPlaceholder')} aria-label={t('searchPlaceholder')} /></div>
           <div className="top-actions">
             {installPrompt && <button className="upload-button" onClick={() => void installPrompt!.prompt()}><Plus size={16} /><span>{t('pwaHint')}</span></button>}
-            <button className={`upload-button${sleepActive ? ' on' : ''}`} onClick={() => setPanel('settings')} title={t('sleepTimer')}><Upload size={16} /><span>{busy ? t('uploading') : t('uploadMusic')}</span></button>
+            <button className="upload-button" onClick={() => fileInput.current?.click()} title={t('uploadMusic')}><Upload size={16} /><span>{busy ? t('uploading') : t('uploadMusic')}</span></button>
             <input ref={fileInput} type="file" accept="audio/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void upload(f); e.target.value = ''; }} />
+            <input ref={coverInput} type="file" accept="image/*" hidden onChange={(e) => { const f = e.target.files?.[0] || null; void pickCover(f); e.target.value = ''; }} />
             <button className={panel === 'settings' ? 'icon-action on' : 'icon-action'} aria-label={t('settings')} title={t('settings')} onClick={() => setPanel(panel === 'settings' ? null : 'settings')}><Settings size={18} /></button>
             <button className="profile" aria-label={user ? t('signOut') : t('signIn')} onClick={() => user ? void supabase?.auth.signOut() : setAuthOpen(true)}>
               <span className="avatar">{(profileName || user?.email || 'N')[0]?.toUpperCase() || 'N'}</span>

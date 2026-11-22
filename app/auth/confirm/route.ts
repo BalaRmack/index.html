@@ -37,5 +37,5 @@ export async function GET(req: Request) {
   if (error || !data.session) return fail('verify');
 
   const fragment = new URLSearchParams({ access_token: data.session.access_token, refresh_token: data.session.refresh_token });
-  return NextResponse.redirect(new URL(`/auth/complete#${fragment.toString()}`, req.url), { status: 307, headers: { 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' } });
+  return NextResponse.redirect(new URL(`/auth/complete?next=${encodeURIComponent(next)}#${fragment.toString()}`, req.url), { status: 307, headers: { 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' } });
 }

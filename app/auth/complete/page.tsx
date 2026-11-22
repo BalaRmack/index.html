@@ -18,9 +18,11 @@ export default function AuthCompletePage() {
     let cancelled = false;
     async function run() {
       const query = new URLSearchParams(window.location.search);
+      const rawNext = query.get('next') || '/';
+      const next = rawNext.startsWith('/') && !rawNext.startsWith('//') ? rawNext : '/';
       if (query.get('auth') === 'error') {
         if (!cancelled) setState('error');
-        window.setTimeout(() => { if (!cancelled) router.replace('/'); }, 4000);
+        window.setTimeout(() => { if (!cancelled) router.replace(next); }, 4000);
         return;
       }
       const fragment = new URLSearchParams(window.location.hash.replace(/^#/, ''));
@@ -30,14 +32,14 @@ export default function AuthCompletePage() {
       window.history.replaceState(null, '', '/auth/complete');
       if (!accessToken || !refreshToken || !supabase) {
         if (!cancelled) setState('error');
-        window.setTimeout(() => { if (!cancelled) router.replace('/'); }, 4000);
+        window.setTimeout(() => { if (!cancelled) router.replace(next); }, 4000);
         return;
       }
       const { error } = await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
       if (cancelled) return;
       setState(error ? 'error' : 'done');
       // Фрагмент больше не нужен: убираем его и у адресной строки после возврата на главную.
-      window.setTimeout(() => { if (cancelled) return; window.history.replaceState(null, '', '/'); router.replace('/'); }, error ? 3500 : 700);
+      window.setTimeout(() => { if (cancelled) return; window.history.replaceState(null, '', next); router.replace(next); }, error ? 3500 : 700);
     }
     void run();
     return () => { cancelled = true; };

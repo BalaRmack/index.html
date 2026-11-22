@@ -73,7 +73,7 @@ export const GENRES: { id: string; ru: string; en: string; query: string }[] = [
 
 /** Быстрый выбор любимых артистов на шаге онбординга: русские и зарубежные сцены. */
 export const ONBOARDING_ARTISTS = [
-  'Кино', 'Земфира', 'Скриптонит', 'Мумий Тролль', 'Пошлая Молли', 'Zivert', 'АИГЕЛ', 'Макс Корч', 'Матранг', 'Дорами',
+  'Кино', 'Земфира', 'Скриптонит', 'Мумий Тролль', 'Пошлая Молли', 'Zivert', 'АИГЕЛ', 'Макс Корж', 'Матранг', 'Дора',
   'The Weeknd', 'Arctic Monkeys', 'Dua Lipa', 'Tame Impala', 'Billie Eilish', 'Kavinsky', 'Woodkid', 'DVRST', 'Deftones', 'Fleetwood Mac',
 ] as const;
 

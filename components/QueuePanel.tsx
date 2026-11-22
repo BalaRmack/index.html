@@ -18,13 +18,13 @@ export default function QueuePanel({ player, onClose }: { player: PlayerBindings
   const [hoverAt, setHoverAt] = useState<number | null>(null);
   const playing = Boolean(player.current);
   // Без играющего трека показываем всю очередь и сдвигаем индексы на 0, а не на 1.
-  const offset = playing ? 1 : 0;
+  const baseIndex = playing ? player.queueIndex + 1 : 0;
   const visible = playing ? player.queue.slice(player.queueIndex) : player.queue;
   const upcoming = playing ? visible.slice(1) : visible;
 
   const moveUpcoming = (from: number, to: number) => {
     if (from === to) return;
-    player.onQueueMove(player.queueIndex + offset + from, player.queueIndex + offset + to);
+    player.onQueueMove(baseIndex + from, baseIndex + to);
   };
 
   return (
@@ -93,7 +93,7 @@ export default function QueuePanel({ player, onClose }: { player: PlayerBindings
                   <span className="queue-tools">
                     <button aria-label={player.t('moveUp')} disabled={index === 0} onClick={() => moveUpcoming(index, index - 1)}>↑</button>
                     <button aria-label={player.t('moveDown')} disabled={index === upcoming.length - 1} onClick={() => moveUpcoming(index, index + 1)}>↓</button>
-                    <button aria-label={player.t('queueRemove')} onClick={() => player.onQueueRemove(player.queueIndex + offset + index)}><X size={13} /></button>
+                    <button aria-label={player.t('queueRemove')} onClick={() => player.onQueueRemove(baseIndex + index)}><X size={13} /></button>
                   </span>
                 </motion.div>
               ))}

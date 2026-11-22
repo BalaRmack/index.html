@@ -47,10 +47,11 @@ export function matchHotkey(event: HotkeyEvent, options: { typing?: boolean } = 
       break;
   }
   const letter = key.length === 1 ? key.toLowerCase() : '';
-  if (letter === 'm') return 'mute';
-  if (letter === 'l') return 'like';
-  if (letter === 'q') return 'queue';
-  if (letter === 'f') return 'expand';
+  const code = event.code || '';
+  if (letter === 'm' || code === 'KeyM') return 'mute';
+  if (letter === 'l' || code === 'KeyL') return 'like';
+  if (letter === 'q' || code === 'KeyQ') return 'queue';
+  if (letter === 'f' || code === 'KeyF') return 'expand';
   return null;
 }
 

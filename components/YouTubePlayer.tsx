@@ -49,7 +49,7 @@ const YouTubePlayer=forwardRef<Handle,Props>(function YouTubePlayer({volume,onSt
         next.player.setVolume(callbacks.current.volume);next.player.playVideo();
       } else {
         const current=slots.current[active.current];
-        if(current.player)current.player.loadVideoById(id);
+        if(current.player){current.player.setVolume(callbacks.current.volume);current.player.loadVideoById(id);}
         else if(initError.current)callbacks.current.onError(`${initError.current} Обновите страницу.`,0);
       }
     },

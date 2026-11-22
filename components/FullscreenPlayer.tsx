@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ListMusic, X } from 'lucide-react';
+import { ListMusic, Pause, Play, SkipBack, SkipForward, X } from 'lucide-react';
 import type { LyricLine, PlayerBindings, Track } from '@/lib/types';
 import { activeLyricLine, lyricsCacheKey } from '@/lib/lyrics';
 import { extractPalette, type Palette } from '@/lib/palette';
@@ -133,7 +133,7 @@ export default function FullscreenPlayer({ player, onClose, mood, onMood }: {
           <div className="fp-meta">
             <h2>{current?.title || t('queueEmpty')}</h2>
             {current && (
-              <button className="fp-artist" onClick={() => player.onOpenArtist(current.artist)}>{current.artist}</button>
+              <button className="fp-artist" onClick={() => { onClose(); player.onOpenArtist(current.artist); }}>{current.artist}</button>
             )}
           </div>
           <div className="fp-progress">
@@ -151,6 +151,9 @@ export default function FullscreenPlayer({ player, onClose, mood, onMood }: {
             <span>{formatDuration(player.duration)}</span>
           </div>
           <div className="fp-controls">
+            <button className="ghost" aria-label={t('previousTrack')} onClick={player.onPrevious}><SkipBack size={18} /></button>
+            <button className="primary" aria-label={player.playing ? t('pauseTrack') : t('playTrack')} onClick={player.onTogglePlay}>{player.playing ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" />}</button>
+            <button className="ghost" aria-label={t('nextTrack')} onClick={player.onNext}><SkipForward size={18} /></button>
             {current && (
               <>
                 <LikeButton active={player.likes.includes(current.id)} label={player.likes.includes(current.id) ? t('unlike') : t('like')} reduced={player.reduced} size={20} onToggle={() => player.onToggleLike(current)} />
@@ -211,7 +214,7 @@ export default function FullscreenPlayer({ player, onClose, mood, onMood }: {
           )}
         </section>
       </div>
-      <AnimatePresence />
+      
     </motion.div>
   );
 }

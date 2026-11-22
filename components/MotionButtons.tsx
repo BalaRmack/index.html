@@ -75,7 +75,7 @@ export function LikeButton({ active, onToggle, label, reduced = false, size = 17
       aria-pressed={active}
       onClick={() => { setDirection(active ? -1 : 1); setBurst((value) => value + 1); onToggle(); }}
       initial={false}
-      animate={reduced
+      animate={reduced || burst === 0
         ? { scale: 1, rotate: 0 }
         : direction > 0
           ? { scale: [1, 1.45, 0.9, 1.1, 1], rotate: [0, -8, 4, 0, 0] }

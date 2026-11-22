@@ -16,16 +16,14 @@ export default function ArtistView({ name, player, onBack }: { name: string; pla
   const tracks = info?.tracks ?? [];
   const artist = info?.name || name;
   const listen = () => {
-    const seed = tracks[0];
-    if (seed) player.onPlay(seed, tracks);
-    else if (tracks[0]) player.onRadio(tracks[0]);
+    if (tracks[0]) player.onPlay(tracks[0], tracks);
   };
 
   return (
     <motion.section className="artist-view" initial={player.reduced ? { opacity: 0 } : { opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={spring}>
       <button className="artist-back" onClick={onBack}>← {player.t('back')}</button>
       <header className="artist-head">
-        <div className="artist-portrait" style={info?.picture ? { backgroundImage: `url('${info.picture}')` } : undefined}>
+        <div className="artist-portrait" style={info?.picture ? { backgroundImage: `url("${info.picture.replace(/"/g, '%22')}")` } : undefined}>
           {!info?.picture && <span>{(artist[0] || 'N').toUpperCase()}</span>}
         </div>
         <div className="artist-headline">
@@ -34,7 +32,7 @@ export default function ArtistView({ name, player, onBack }: { name: string; pla
           {info?.genres.length ? <div className="artist-genres">{info.genres.slice(0, 5).map((genre) => <i key={genre}>{genre}</i>)}</div> : null}
           <p className="artist-stats">
             {info?.albums ? <span>{info.albums} albums</span> : null}
-            {info?.fans ? <span>{player.t('listeners', { count: info.fans.toLocaleString('ru-RU') })}</span> : null}
+            {info?.fans ? <span>{player.t('listeners', { count: info.fans.toLocaleString(player.prefs.language === 'en' ? 'en-US' : 'ru-RU') })}</span> : null}
           </p>
           <div className="artist-actions">
             <motion.button className="primary" whileTap={player.reduced ? undefined : { scale: 0.95 }} onClick={listen} disabled={!tracks.length}>

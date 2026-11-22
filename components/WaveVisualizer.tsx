@@ -103,6 +103,8 @@ export default function WaveVisualizer({ playing, mood, accent, particles = 'ful
     let time = 0;
     const draw = (delta: number) => {
       const state = stateRef.current;
+      const wantedCount = PARTICLE_COUNT[state.particles] ?? 0;
+      if (field.length !== wantedCount) seed(wantedCount);
       const config = MOODS[state.mood] ?? MOODS.unknown;
       const accentRgb = hexToRgb(state.accent || '#b7e49a');
       const shift = config.hue / 100;
@@ -198,6 +200,8 @@ export default function WaveVisualizer({ playing, mood, accent, particles = 'ful
       const delta = Math.min(64, now - last);
       last = now;
       const state = stateRef.current;
+      const wantedCount = PARTICLE_COUNT[state.particles] ?? 0;
+      if (field.length !== wantedCount) seed(wantedCount);
       // Пауза на скрытой вкладке и в режиме «только градиент» — не жечь батарею.
       if (state.particles === 'off' && !state.playing) {
         draw(delta);

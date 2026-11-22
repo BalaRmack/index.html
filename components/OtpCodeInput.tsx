@@ -72,7 +72,7 @@ export default function OtpCodeInput({
   const fill = (raw: string, from: number, pasted: boolean) => {
     const digits = pasted ? pickDigits(raw, length) : digitsOnly(raw);
     if (!digits) {
-      if (!pasted) onChange('');
+      if (!pasted && value[from]) onChange(value.slice(0, from) + value.slice(from + 1));
       return;
     }
     // Вставка полного кода раскладывается с первой ячейки, частичная — от текущей.

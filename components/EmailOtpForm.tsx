@@ -91,8 +91,9 @@ export default function EmailOtpForm({ t, reducedMotion = false, onSignedIn }: {
     try {
       if (!navigator.clipboard?.readText) throw new Error('unsupported');
       const text = await navigator.clipboard.readText();
-      const candidates = String(text).match(/\d{6,12}/g) ?? [];
-      const digits = candidates.sort((a, b) => b.length - a.length)[0];
+      const exactSix = String(text).match(/\b\d{6}\b/);
+      const candidates = String(text).match(/\d{6,8}/g) ?? [];
+      const digits = exactSix ? exactSix[0] : candidates[0];
       if (!digits) { setError(t('clipboardEmpty')); return; }
       pastedCode.current = digits.length > CODE_LENGTH ? digits : '';
       setCode(digits.slice(0, CODE_LENGTH));

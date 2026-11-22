@@ -49,7 +49,7 @@ export default function TrackTable({ t, view, search, searchStatus = '', tracks,
     <>
       {playlist && (
         <div className="playlist-tools" aria-label={t('playlistTools')}>
-          <span className="playlist-cover-lg" style={playlist.cover_url ? { backgroundImage: `url('${playlist.cover_url}')` } : undefined}>{!playlist.cover_url && <Music2 size={20} />}</span>
+          <span className="playlist-cover-lg" style={playlist.cover_url ? { backgroundImage: `url('${playlist.cover_url.replace(/'/g, '%27')}')` } : undefined}>{!playlist.cover_url && <Music2 size={20} />}</span>
           <div className="playlist-tools-text">
             <b>{playlist.name}</b>
             <small>{t('tracksCount', { count: tracks.length })}{playlist.created_at ? ` · ${formatAddedDate(playlist.created_at, { locale })}` : ''}</small>
@@ -73,14 +73,14 @@ export default function TrackTable({ t, view, search, searchStatus = '', tracks,
               <button className="track-number" onClick={() => onPlay(track, tracks)} aria-label={t('playTrack')}>
                 {isCurrent && playing ? <span className="row-eq" aria-hidden="true"><i /><i /><i /></span> : <><span>{String(index + 1).padStart(2, '0')}</span><Play className="row-play" size={15} fill="currentColor" /></>}
               </button>
-              <button className="track-title" onClick={() => onPlay(track, tracks)}>
+              <div className="track-title" role="button" tabIndex={0} onClick={() => onPlay(track, tracks)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onPlay(track, tracks); } }}>
                 <span className="track-art" style={{ backgroundImage: `url('${imageFor(track)}')` }} />
                 <span className="track-names">
                   <b>{track.title}</b>
-                  <small className="track-artist" onClick={(event) => { event.stopPropagation(); onOpenArtist(track.artist); }}>{track.artist}</small>
+                  <button type="button" className="track-artist" onClick={(event) => { event.stopPropagation(); onOpenArtist(track.artist); }}>{track.artist}</button>
                 </span>
                 {track.source && track.source !== 'local' && <span className="track-badge">{track.source === 'youtube' ? t('previewBadge') : t('fromCatalog')}</span>}
-              </button>
+              </div>
               <span className="track-album" title={track.album || undefined}>{track.album || t('noAlbum')}</span>
               <span className="track-added">{formatAddedDate(track.created_at, { locale }) || t('recentlyAdded')}</span>
               <span className="track-time">{formatDuration(isCurrent && duration ? duration : track.duration)}</span>
