@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ListMusic, Pause, Play, SkipBack, SkipForward, X } from 'lucide-react';
+import { ListMusic, X } from 'lucide-react';
 import type { LyricLine, PlayerBindings, Track } from '@/lib/types';
 import { activeLyricLine, lyricsCacheKey } from '@/lib/lyrics';
 import { extractPalette, type Palette } from '@/lib/palette';
@@ -133,7 +133,7 @@ export default function FullscreenPlayer({ player, onClose, mood, onMood }: {
           <div className="fp-meta">
             <h2>{current?.title || t('queueEmpty')}</h2>
             {current && (
-              <button className="fp-artist" onClick={() => { onClose(); player.onOpenArtist(current.artist); }}>{current.artist}</button>
+              <button className="fp-artist" onClick={() => player.onOpenArtist(current.artist)}>{current.artist}</button>
             )}
           </div>
           <div className="fp-progress">
@@ -151,9 +151,6 @@ export default function FullscreenPlayer({ player, onClose, mood, onMood }: {
             <span>{formatDuration(player.duration)}</span>
           </div>
           <div className="fp-controls">
-            <button className="ghost" aria-label={t('previousTrack')} onClick={() => player.onSkip(-1)}><SkipBack size={18} /></button>
-            <button className="primary" aria-label={player.playing ? t('pauseTrack') : t('playTrack')} onClick={player.onTogglePlay}>{player.playing ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" />}</button>
-            <button className="ghost" aria-label={t('nextTrack')} onClick={() => player.onSkip(1)}><SkipForward size={18} /></button>
             {current && (
               <>
                 <LikeButton active={player.likes.includes(current.id)} label={player.likes.includes(current.id) ? t('unlike') : t('like')} reduced={player.reduced} size={20} onToggle={() => player.onToggleLike(current)} />
@@ -170,16 +167,10 @@ export default function FullscreenPlayer({ player, onClose, mood, onMood }: {
         </section>
 
         <section className="fp-right">
-          <LayoutGroup id="fp-tabs-group">
-            <div className="fp-tabs" role="tablist">
-              {([['lyrics', t('lyrics')], ['mood', t('waveMoodTitle')]] as const).map(([id, label]) => (
-                <button key={id} type="button" role="tab" aria-selected={rightTab === id} className={rightTab === id ? 'on' : undefined} onClick={() => setRightTab(id)}>
-                  {rightTab === id && <motion.span layoutId="fp-tab-pill" className="fp-tab-pill" transition={{ type: 'spring', stiffness: 380, damping: 30 }} />}
-                  <span className="fp-tab-label">{label}</span>
-                </button>
-              ))}
-            </div>
-          </LayoutGroup>
+          <LayoutGroup id="fp-right-tabs"><div className="fp-tabs" role="tablist">
+            <button role="tab" aria-selected={tab === 'lyrics'} className={tab === 'lyrics' ? 'on' : undefined} onClick={() => setTab('lyrics')}>{tab === 'lyrics' && <motion.span layoutId="fp-tab-pill" className="fp-tab-pill" transition={{ type: 'spring', stiffness: 380, damping: 30 }} />}<ListMusic size={14} /> {t('lyrics')}</button>
+            <button role="tab" aria-selected={tab === 'wave'} className={tab === 'wave' ? 'on' : undefined} onClick={() => setTab('wave')}>{t('waveMoodLabel')}</button>
+          </div>
           {tab === 'lyrics' ? (
             <div className="fp-lyrics" ref={scroller}>
               {loading && <p className="panel-muted">{t('lyricsLoading')}</p>}
@@ -211,16 +202,19 @@ export default function FullscreenPlayer({ player, onClose, mood, onMood }: {
           ) : (
             <div className="fp-wave">
               <WaveVisualizer playing={player.playing} mood={mood} accent={base} particles={player.prefs.particles} reduced={player.reduced} analyser={player.analyser} className="fp-wave-canvas" />
-              <div className="fp-wave-moods">
+              <LayoutGroup id="fp-mood-tabs"><div className="fp-wave-moods">
                 {([['energetic', t('waveMoodEnergetic')], ['calm', t('waveMoodCalm')], ['unknown', t('waveMoodUnknown')], ['loved', t('waveMoodLoved')]] as const).map(([id, label]) => (
-                  <button key={id} className={mood === id ? 'on' : undefined} onClick={() => onMood(id)}>{label}</button>
+                  <button key={id} className={mood === id ? 'on' : undefined} onClick={() => onMood(id)}>
+                    {mood === id && <motion.span layoutId="fp-mood-pill" className="fp-tab-pill" transition={{ type: 'spring', stiffness: 380, damping: 30 }} />}
+                    <span className="fp-tab-label">{label}</span>
+                  </button>
                 ))}
-              </div>
+              </div></LayoutGroup>
             </div>
           )}
         </section>
       </div>
-      
+      <AnimatePresence />
     </motion.div>
   );
 }
