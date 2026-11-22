@@ -852,3 +852,34 @@ button.primary:hover:not(:disabled), .wave-button:hover:not(:disabled) {
   border: 1px solid rgba(255, 255, 255, 0.13) !important;
   box-shadow: 0 24px 64px rgba(0, 0, 0, 0.58), inset 0 1px 0 rgba(255, 255, 255, 0.16) !important;
 }
+/* Fix compact sidebar layout overrides */
+html[data-sidebar="compact"] .brand > span:last-child,
+html[data-sidebar="compact"] .side-label,
+html[data-sidebar="compact"] .nav-text,
+html[data-sidebar="compact"] .library-links span > span,
+html[data-sidebar="compact"] .create-playlist span:not(.side-cover),
+html[data-sidebar="compact"] .side-bottom p,
+html[data-sidebar="compact"] .side-footer,
+html[data-sidebar="compact"] .side-settings span {
+  display: none !important;
+}
+
+html[data-sidebar="compact"] .nav button,
+html[data-sidebar="compact"] .library-links button,
+html[data-sidebar="compact"] .create-playlist,
+html[data-sidebar="compact"] .side-settings {
+  justify-content: center !important;
+  align-items: center !important;
+  padding: 0 !important;
+  gap: 0 !important;
+  width: 44px !important;
+  height: 44px !important;
+  margin-inline: auto !important;
+}
+
+html[data-sidebar="compact"] .side-bottom {
+  padding-bottom: 108px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+}
