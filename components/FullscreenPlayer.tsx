@@ -172,7 +172,7 @@ export default function FullscreenPlayer({ player, onClose, mood, onMood }: {
         <section className="fp-right">
           <LayoutGroup id="fp-tabs-group">
             <div className="fp-tabs" role="tablist">
-              {([['lyrics', t('lyrics')], ['mood', t('waveMood')]] as const).map(([id, label]) => (
+              {([['lyrics', t('lyrics')], ['mood', t('waveMoodTitle')]] as const).map(([id, label]) => (
                 <button key={id} type="button" role="tab" aria-selected={rightTab === id} className={rightTab === id ? 'on' : undefined} onClick={() => setRightTab(id)}>
                   {rightTab === id && <motion.span layoutId="fp-tab-pill" className="fp-tab-pill" transition={{ type: 'spring', stiffness: 380, damping: 30 }} />}
                   <span className="fp-tab-label">{label}</span>
