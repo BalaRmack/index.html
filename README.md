@@ -40,6 +40,14 @@ Apply `supabase/migrations/002_listening_history.sql` after the initial migratio
 
 Run `npm test` for offline mirror-failover, normalization and taste-ranking tests. Because the catalogue and recommendations now use Next.js API routes, a future Tauri static client needs a deployed API backend and appropriate native-origin/CORS and auth redirect configuration; static export alone is not sufficient.
 
+## Blocked embeds (errors 101/150/100)
+
+Rightsholders frequently disallow embedding of the official clip, and the IFrame API then reports 101/150 (or 100 when the video is closed). `lib/embed-fallback.ts` handles that without stopping the queue: the player hands the numeric error to the page, which searches the same catalogue mirrors for an allowed version of the same song — `Artist - Title audio`, then `Artist Title lyrics`, then `Artist Title Topic` — and loads the first candidate that actually starts playing, up to three attempts. Retries are silent: the player keeps its loading state and shows no error. A candidate that never reports back is dropped after a seven-second timeout, because `onError` is not guaranteed to arrive. One round of attempts shares a twelve-second budget and each search request is capped at five seconds, so a hanging mirror ends the round instead of extending it.
+
+When a substitute starts playing, its `videoId` is stored in `localStorage` under `nocturne.embed-versions.v1` (newest 200 entries, thirty days), so replaying the track — including the pre-cued next item — uses the working video immediately, with no retry loop. If a remembered substitute stops working, it loses trust once and is removed after a second failure, and the search runs again.
+
+Only when all attempts are blocked does the app show one short notice ("Трек недоступен для стриминга, переключаем дальше") and start the next item in the queue. Nothing is faked: no placeholder audio, no silent retry storms — the loop is bounded by three attempts per track, and search failures end it immediately. Availability still depends on the third-party mirrors and on the rightsholder's per-country embedding rules, so a track that worked yesterday can be blocked today.
+
 ## Glass effects
 
 Translucent CSS surfaces use backdrop blur and static edge highlights, with an SVG edge displacement map and separate RGB offsets as progressive enhancement where supported. Browsers that do not support SVG backdrop filters use the gradient-only treatment. Effects and frame rate depend on browser, device and compositor; reduced-motion preferences are respected.

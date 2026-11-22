@@ -467,19 +467,29 @@ button.wide{display:inline-flex;gap:8px;align-items:center;padding:10px 12px;bor
 .otp-step{display:grid;gap:10px}
 .otp-field{display:flex;gap:8px}
 .otp-field input{flex:1;min-width:0;height:44px;border:1px solid #465348;border-radius:8px;background:#101712;color:#fff;padding:0 12px;font-size:13px}
-.otp-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.otp-row{display:flex;gap:8px;align-items:stretch;flex-wrap:nowrap;width:100%}
 .otp-code-label{font-size:11px;color:#a9b7aa}
-.otp-cell{width:44px;height:54px;border-radius:11px;border:1px solid #465348;background:#0f1611;color:#fff;font-size:22px;text-align:center;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;padding:0}
-.otp-cell.is-filled{border-color:var(--green);box-shadow:0 0 0 3px var(--green-glow)}
+.otp-cell{position:relative;flex:1 1 0;min-width:0;max-width:52px;height:54px;border-radius:11px;border:1px solid #465348;background:#0f1611;color:#fff;font-size:22px;text-align:center;overflow:hidden;transition:border-color .18s,box-shadow .18s}
+.otp-cell input{position:absolute;inset:0;width:100%;height:100%;padding:0;border:0;outline:none;background:transparent;color:#fff;font:inherit;font-size:22px;text-align:center;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;caret-color:var(--green)}
+/* Рамка фокуса рисуется на ячейке: у нативного input она была бы шире модального окна. */
+.otp-cell input:focus-visible{outline:none}
+.otp-cell.is-filled,.otp-cell.is-active{border-color:var(--green);box-shadow:0 0 0 3px var(--green-glow)}
+.otp-cell.is-invalid{border-color:#ff8b8b;box-shadow:0 0 0 3px rgba(255,120,120,.18)}
 .otp-sent-to{font-size:11px;color:#9fb0a1;line-height:1.5}
 .otp-sent-to b{color:var(--green)}
 .otp-paste{font-size:10px;padding:6px 9px;border-radius:7px;border:1px solid rgba(222,255,230,.2);color:#cbd8cc}
-.otp-timer{margin-left:auto;display:inline-flex;gap:7px;align-items:center;font-size:10px;color:#93a495}
-.otp-timer i{display:block;width:34px;height:3px;border-radius:3px;background:rgba(255,255,255,.14);position:relative;overflow:hidden}
-.otp-timer i::after{content:'';position:absolute;inset:0 auto 0 0;background:var(--green);width:var(--otp-progress,0%);transition:width .3s linear}
+/* Таймер повторного входа: трек + залитая часть, которую растягивает framer-motion. */
+.otp-timer{display:inline-flex;gap:7px;align-items:center;font-size:10px;color:#93a495}
+.otp-timer-track{display:block;width:34px;height:3px;border-radius:3px;background:rgba(255,255,255,.14);overflow:hidden}
+.otp-timer i{display:block;width:100%;height:100%;border-radius:3px;background:var(--green);transform-origin:left}
 .otp-error{font-size:11px;color:#ff9d9d;line-height:1.5}
 .otp-actions{display:grid;gap:8px}
-.otp-back{font-size:10px;color:#93a495;justify-self:start;padding:4px 0}
+/* Строка «Отправить ещё раз / Изменить почту»: кнопки слева, таймер справа, без наложений. */
+.otp-resend{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;flex-wrap:wrap}
+.otp-resend-actions{display:flex;align-items:center;gap:14px;min-width:0;flex-wrap:wrap}
+.otp-resend button{font-size:10px;color:#93a495;line-height:1.2}
+.otp-resend button:disabled{opacity:.6}
+.otp-back{display:inline-flex;align-items:center;gap:5px;white-space:nowrap;padding:4px 0}
 .otp-done{display:grid;gap:10px;justify-items:center;text-align:center;padding:22px 0}
 .otp-form>small,.otp-step small{font-size:10px;color:#87978a;line-height:1.5}
 .modal>small,.otp-form small{font-size:10px;color:#87978a}
@@ -518,3 +528,5 @@ button.wide{display:inline-flex;gap:8px;align-items:center;padding:10px 12px;bor
   .lyric-line{transition:none}
   .burst-sparks,.burst-ring{display:none}
 }
+
+@media(max-width:760px){.otp-row{gap:6px}.otp-cell{height:48px;max-width:none}}
