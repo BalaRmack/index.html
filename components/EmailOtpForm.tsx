@@ -169,23 +169,23 @@ export default function EmailOtpForm({ t, reducedMotion = false, onSignedIn }: {
               {status === 'verifying' ? t('verifying') : t('verify')} <ArrowRight size={16} />
             </button>
             <div className="otp-resend">
-              <button type="button" disabled={busy || cooldown > 0} onClick={() => void sendCode(true)}>
-                {cooldown > 0 ? t('resendIn', { seconds: cooldown }) : t('resendCode')}
-              </button>
-              <button type="button" className="otp-back" onClick={() => { setStep('email'); setCode(''); pastedCode.current = ''; setError(''); setCooldown(0); }}>
-                <ArrowLeft size={14} /> {t('changeEmail')}
-              </button>
+              <div className="otp-resend-actions">
+                <button type="button" disabled={busy || cooldown > 0} onClick={() => void sendCode(true)}>
+                  {cooldown > 0 ? t('resendIn', { seconds: cooldown }) : t('resendCode')}
+                </button>
+                <button type="button" className="otp-back" onClick={() => { setStep('email'); setCode(''); pastedCode.current = ''; setError(''); setCooldown(0); }}>
+                  <ArrowLeft size={14} aria-hidden="true" /><span>{t('changeEmail')}</span>
+                </button>
+              </div>
+              {/* Таймер живёт в том же ряду, что и кнопки: отдельным блоком он падал на строку вниз. */}
+              {cooldown > 0 && (
+                <motion.div className="otp-timer" aria-hidden="true">
+                  <span className="otp-timer-track">
+                    <motion.i initial={false} animate={{ scaleX: cooldown / RESEND_SECONDS }} transition={{ duration: 1, ease: 'linear' }} />
+                  </span>
+                </motion.div>
+              )}
             </div>
-            {cooldown > 0 && (
-              <motion.div className="otp-timer" aria-hidden="true">
-                <motion.i
-                  initial={false}
-                  animate={{ scaleX: cooldown / RESEND_SECONDS }}
-                  transition={{ duration: 1, ease: 'linear' }}
-                  style={{ transformOrigin: 'left' }}
-                />
-              </motion.div>
-            )}
           </motion.div>
         )}
       </Presence>

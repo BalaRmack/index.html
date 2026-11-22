@@ -24,6 +24,20 @@ type Props = {
 
 const digitsOnly = (text: string) => text.replace(/\D+/g, '');
 
+/**
+ * Для вставки из буфера важны НЕ «все цифры подряд», а группы цифр: письмо вроде
+ * «Код действует 10 минут, ваш код 481902» при простом склеивании дало бы «104819».
+ * Поэтому сначала берётся самая длинная непрерывная группа цифр (обычно это и есть код),
+ * а если её не хватает по длины — все цифры строки (код, разбитый пробелами, тоже пройдёт).
+ */
+function pickDigits(text: string, length: number): string {
+  const runs = text.match(/\d+/g) ?? [];
+  const longest = runs.reduce((best, run) => (run.length > best.length ? run : best), '');
+  if (longest.length >= length) return longest;
+  const merged = digitsOnly(text);
+  return merged.length > longest.length ? merged : longest;
+}
+
 export default function OtpCodeInput({
   length = 6,
   value,
@@ -36,6 +50,8 @@ export default function OtpCodeInput({
   label,
   reducedMotion = false,
 }: Props) {
+  // Каждая ячейка принимает ровно одну цифру: maxLength=length позволял напечатать
+  // «123456» в первой же ячейке. Вставка из буфера не страдает — onPaste сам раскладывает код.
   const inputs = useRef<(HTMLInputElement | null)[]>([]);
   const [active, setActive] = useState(-1);
   const cells = Array.from({ length }, (_, index) => value[index] ?? '');
@@ -54,7 +70,7 @@ export default function OtpCodeInput({
   }, [autoFocus, focusKey, length]);
 
   const fill = (raw: string, from: number, pasted: boolean) => {
-    const digits = digitsOnly(raw);
+    const digits = pasted ? pickDigits(raw, length) : digitsOnly(raw);
     if (!digits) {
       if (!pasted) onChange('');
       return;
@@ -108,7 +124,7 @@ export default function OtpCodeInput({
             inputMode="numeric"
             autoComplete={index === 0 ? 'one-time-code' : 'off'}
             pattern="[0-9]*"
-            maxLength={length}
+            maxLength={1}
             disabled={disabled}
             aria-label={`Цифра ${index + 1}`}
           />
