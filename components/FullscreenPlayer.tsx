@@ -190,21 +190,21 @@ export default function FullscreenPlayer({ player, onClose, mood, onMood, origin
             exit={{ opacity: 0, transition: { duration: 0.1 } }}
             transition={{ duration: 0.36, delay: 0.32, ease: [0.22, 1, 0.36, 1] }}
           >
-            <ImpulseButton variant="left" className="fp-skip-btn" label={t('previous')} reduced={player.reduced} disabled={!current} onClick={() => player.onSkip(-1)}>
+            <ImpulseButton variant="left" className="fp-skip-btn" label={'Предыдущий трек'} reduced={player.reduced} disabled={!current} onClick={() => player.onSkip(-1)}>
               <SkipBack size={22} />
             </ImpulseButton>
             <motion.button
               type="button"
               className="fp-play-btn"
-              aria-label={player.playing ? t('pause') : t('play')}
-              title={player.playing ? t('pause') : t('play')}
+              aria-label={player.playing ? 'Пауза' : 'Воспроизвести'}
+              title={player.playing ? 'Пауза' : 'Воспроизвести'}
               disabled={!current}
               whileTap={player.reduced ? undefined : { scale: 0.92 }}
               onClick={player.onTogglePlay}
             >
               {player.playing ? <Pause size={24} fill="currentColor" /> : <Play size={24} fill="currentColor" style={{ marginLeft: 2 }} />}
             </motion.button>
-            <ImpulseButton variant="right" className="fp-skip-btn" label={t('next')} reduced={player.reduced} disabled={!current} onClick={() => player.onSkip(1)}>
+            <ImpulseButton variant="right" className="fp-skip-btn" label={'Следующий трек'} reduced={player.reduced} disabled={!current} onClick={() => player.onSkip(1)}>
               <SkipForward size={22} />
             </ImpulseButton>
           </motion.div>
