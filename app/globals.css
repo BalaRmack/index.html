@@ -695,3 +695,8 @@ html[data-glass="full"] .volume-slider:active::-moz-range-thumb {
 .fp-tabs button.on .fp-tab-label,.fp-moods button.on .fp-tab-label,.fp-wave-moods button.on .fp-tab-label{color:var(--green-ink,#111a13)!important;font-weight:700!important}
 html[data-accent="mono"] .fp-tab-pill{background:#f2f2f2!important}
 html[data-accent="mono"] .fp-tabs button.on .fp-tab-label,html[data-accent="mono"] .fp-moods button.on .fp-tab-label{color:#0a0a0a!important}
+
+/* Vertical centering of player center controls and seek bar */
+.player-center{display:flex!important;flex-direction:column!important;justify-content:center!important;align-items:center!important;gap:4px!important;height:100%!important;padding:4px 0!important}
+.player-buttons{margin:0!important;padding:0!important;align-items:center!important}
+.player-center .progress{margin:0!important;align-items:center!important}
