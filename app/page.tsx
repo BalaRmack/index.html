@@ -926,7 +926,7 @@ export default function HomePage() {
             <ImpulseButton label={t('nextTrack')} reduced={reducedMotion} variant="right" onClick={() => void skip(1)}><SkipForward size={18} fill="currentColor" /></ImpulseButton>
             <ImpulseButton label={t('repeat')} className={repeat ? 'on' : ''} reduced={reducedMotion} variant="repeat" onClick={() => setRepeat(!repeat)}><Repeat2 size={17} /></ImpulseButton>
           </div>
-          <div className="progress"><span>{format(elapsed)}</span><input aria-label={t('seek')} type="range" min="0" max={duration || 0} value={Math.min(elapsed, duration || 0)} onChange={(e) => seek(Number(e.target.value))} style={{ '--progress': `${duration ? elapsed / duration * 100 : 0}%` } as React.CSSProperties} /><span>{format(duration)}</span></div>
+          <div className="progress"><span>{format(elapsed)}</span><div className="glass-range-wrap" style={{ '--progress': `${duration ? elapsed / duration * 100 : 0}%` } as React.CSSProperties}><input aria-label={t('seek')} type="range" min="0" max={duration || 0} value={Math.min(elapsed, duration || 0)} onChange={(e) => seek(Number(e.target.value))} /><span className="glass-thumb" aria-hidden="true" /></div><span>{format(duration)}</span></div>
         </div>
         <div className="player-right">
           <button className={sleepActive ? 'on' : ''} aria-label={t('sleepTimer')} title={sleepActive ? t('sleepSet', { time: sleep.kind === 'track' ? t('sleepEndOfTrack') : formatRemaining(sleepLeft ?? 0) }) : t('sleepTimer')} onClick={() => setSleep(sleep.kind === 'off' ? sleepMinutes(SLEEP_MINUTES_DEFAULT) : sleepOff())}><Timer size={17} /></button>
@@ -935,7 +935,7 @@ export default function HomePage() {
           <button aria-label={current ? t('expandPlayer') : t('queueEmpty')} title={t('expandPlayer')} disabled={!current} onClick={() => setFullscreen(true)}><SquarePlay size={18} /></button>
           <div className="volume-control" onWheel={(e) => { e.preventDefault(); const next = Math.max(0, Math.min(100, (muted ? 0 : volume) + (e.deltaY < 0 ? 5 : -5))); setMuted(next === 0); setVolume(next); }}>
             <VolumeButton muted={muted || volume === 0} label={muted || volume === 0 ? t('unmute') : t('mute')} reduced={reducedMotion} onClick={toggleMute} />
-            <input className="volume-slider" aria-label={t('volume')} type="range" min="0" max="100" value={muted ? 0 : volume} onChange={(e) => { const v = Number(e.target.value); setMuted(v === 0); setVolume(v); }} style={{ '--progress': `${muted ? 0 : volume}%` } as React.CSSProperties} />
+            <div className="glass-range-wrap volume-wrap" style={{ '--progress': `${muted ? 0 : volume}%` } as React.CSSProperties}><input className="volume-slider" aria-label={t('volume')} type="range" min="0" max="100" value={muted ? 0 : volume} onChange={(e) => { const v = Number(e.target.value); setMuted(v === 0); setVolume(v); }} /><span className="glass-thumb" aria-hidden="true" /></div>
             <span className="volume-pct">{muted ? 0 : volume}%</span>
           </div>
         </div>
