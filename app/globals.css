@@ -700,3 +700,9 @@ html[data-accent="mono"] .fp-tabs button.on .fp-tab-label,html[data-accent="mono
 .player-center{display:flex!important;flex-direction:column!important;justify-content:center!important;align-items:center!important;gap:4px!important;height:100%!important;padding:4px 0!important}
 .player-buttons{margin:0!important;padding:0!important;align-items:center!important}
 .player-center .progress{margin:0!important;align-items:center!important}
+
+/* Prevent side panels from overlapping the bottom player */
+@media(min-width:761px){
+  .now-playing-panel{bottom:112px!important;border-bottom:1px solid rgba(255,255,255,.14)!important;border-bottom-left-radius:18px!important;padding-bottom:24px!important}
+  .now-playing-panel.is-left{border-bottom-left-radius:0!important;border-bottom-right-radius:18px!important}
+}
