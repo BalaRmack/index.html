@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start -H 0.0.0.0",
     "lint": "eslint .",
-    "test": "tsx --test --test-force-exit --test-timeout=45000 tests/*.test.ts"
+    "test": "tsx --test --test-force-exit --test-timeout=45000 tests/*.test.ts",
+    "auth:check": "node supabase/configure-auth.mjs",
+    "auth:apply": "node supabase/configure-auth.mjs --apply"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.119.2",

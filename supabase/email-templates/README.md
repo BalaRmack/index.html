@@ -53,6 +53,18 @@
 частоту и чаще попадает в спам. Для боевого проекта включите свой SMTP (отправитель вида
 `nocturne@ваш-домен`) — шаблон от этого не меняется.
 
+### Если нужных полей в Dashboard нет — готовый скрипт
+
+```bash
+npm run auth:check          # показать, что differs от нужного (ничего не пишет)
+npm run auth:apply          # применить: длина кода 6, срок 600, site URL, редиректы, rate limit + письма
+```
+
+Нужен `SUPABASE_ACCESS_TOKEN` (https://supabase.com/dashboard/account/tokens). Скрипт —
+`supabase/configure-auth.mjs`: он перечитывает конфиг после записи и печатает OK/FAIL по каждому
+ключу, а при отказе Supabase принять HTML писем дописывает хотя бы критичные параметры. Запускать
+на своей машине: у песочницы Arena нет доступа к api.supabase.com.
+
 ### Если нужных полей в Dashboard нет — Management API
 
 ```bash

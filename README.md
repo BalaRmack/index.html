@@ -11,6 +11,13 @@ The library ships no demo rows: an empty account shows an empty library, and eve
 3. Apply all migrations in `supabase/migrations` in order to a new Supabase project. Configure the Auth site URL and redirect allowlist for your deployed domain and local URL.
 4. `npm run dev`.
 
+Supabase Auth settings are applied by a script rather than guessed at runtime — `npm run auth:check` shows the diff, `npm run auth:apply` writes it (needs `SUPABASE_ACCESS_TOKEN`, run on your machine):
+
+```bash
+SUPABASE_ACCESS_TOKEN=sbp_xxx npm run auth:check
+SUPABASE_ACCESS_TOKEN=sbp_xxx npm run auth:apply
+```
+
 Sign-in uses a six-digit email code (Supabase OTP), not a magic link: `app/auth/confirm` validates it and `app/auth/complete` finishes the session. Supabase Auth must be configured for it — `mailer_otp_length = 6`, OTP expiry, email templates and the redirect allowlist are documented in [`supabase/email-templates/README.md`](supabase/email-templates/README.md). The default Supabase SMTP has sending restrictions, so configure an email provider for your use case. Without `mailer_otp_length = 6` the code in the email is 8 digits and the six-cell input will not accept it. Audio is private per user, with short-lived signed URLs and row-level security. Demo playback works without an account. Uploads are limited to 50 MB. No claim of zero network latency is made: playback streams and actual start time depends on the browser and connection.
 
 The UI and audio engine run entirely in the browser, with no native API dependency. A future Tauri shell can host a static client after configuring Next static export; Supabase and Auth redirect/deep-link policies must be configured for the desktop origin. No Rust shell is included yet.
