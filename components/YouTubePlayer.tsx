@@ -6,7 +6,7 @@ import { embedErrorMessage } from '@/lib/embed-fallback';
 declare global { interface Window { onYouTubeIframeAPIReady?:()=>void } }
 
 type Handle = { load:(videoId:string)=>void; cue:(videoId:string|null)=>void; stop:()=>void; play:()=>void; pause:()=>void; seek:(seconds:number)=>void; volume:(value:number)=>void };
-type Props = { volume:number; onState:(state:'playing'|'paused'|'ended')=>void; onProgress:(time:number,duration:number)=>void; onError:(message:string,code:number)=>void };
+type Props = { volume:number; miniWindow?:boolean; onCloseMini?:()=>void; onState:(state:'playing'|'paused'|'ended')=>void; onProgress:(time:number,duration:number)=>void; onError:(message:string,code:number)=>void };
 let apiPromise:Promise<typeof YT>|undefined;
 function youtubeApi() {
   if(window.YT?.Player) return Promise.resolve(window.YT);
@@ -25,7 +25,7 @@ function youtubeApi() {
 
 // Both instances stay mounted. Cue prepares the second player, but does not buffer video.
 type Slot = { player:YT.Player|null; cued:string|null; readyToPlay:boolean };
-const YouTubePlayer=forwardRef<Handle,Props>(function YouTubePlayer({volume,onState,onProgress,onError},ref){
+const YouTubePlayer=forwardRef<Handle,Props>(function YouTubePlayer({volume,miniWindow=false,onCloseMini,onState,onProgress,onError},ref){
   const containers=useRef<(HTMLDivElement|null)[]>([null,null]);
   const slots=useRef<Slot[]>([{player:null,cued:null,readyToPlay:false},{player:null,cued:null,readyToPlay:false}]);
   const active=useRef(0);const selected=useRef<string|null>(null);const upcoming=useRef<string|null>(null);
@@ -87,7 +87,7 @@ const YouTubePlayer=forwardRef<Handle,Props>(function YouTubePlayer({volume,onSt
     }).catch(error=>{if(!disposed){initError.current=error.message;if(selected.current)callbacks.current.onError(error.message,0);}});
     return()=>{disposed=true;if(interval)window.clearInterval(interval);instances.forEach(player=>player.destroy());slots.current.forEach(slot=>{slot.player=null;slot.cued=null;slot.readyToPlay=false;});};
   },[]);
-  return <div className="youtube-background" aria-hidden="true">{[0,1].map(index=><div key={index} ref={node=>{containers.current[index]=node}} className="youtube-frame" />)}</div>;
+  return <div className={miniWindow ? 'youtube-mini-pip' : 'youtube-background'} aria-hidden={!miniWindow}>{miniWindow && onCloseMini && <button type="button" className="youtube-mini-close" aria-label="Закрыть видео" onClick={onCloseMini}>✕</button>}{[0,1].map(index=><div key={index} ref={node=>{containers.current[index]=node}} className="youtube-frame" />)}</div>;
 });
 export default YouTubePlayer;
 export type YouTubePlayerHandle = Handle;

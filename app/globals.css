@@ -706,3 +706,9 @@ html[data-accent="mono"] .fp-tabs button.on .fp-tab-label,html[data-accent="mono
   .now-playing-panel{bottom:112px!important;border-bottom:1px solid rgba(255,255,255,.14)!important;border-bottom-left-radius:18px!important;padding-bottom:24px!important}
   .now-playing-panel.is-left{border-bottom-left-radius:0!important;border-bottom-right-radius:18px!important}
 }
+
+/* Emergency fallback YouTube mini-window (shown only when standard hidden embed is blocked) */
+.youtube-mini-pip{position:fixed!important;right:22px!important;bottom:112px!important;width:280px!important;height:158px!important;z-index:85!important;border-radius:16px!important;overflow:hidden!important;background:#0b0f0d!important;border:1px solid rgba(255,255,255,.2)!important;box-shadow:0 18px 44px rgba(0,0,0,.62),inset 0 1px 0 rgba(255,255,255,.25)!important;animation:pipPop .24s cubic-bezier(.22,1,.36,1)}
+.youtube-mini-pip .youtube-frame,.youtube-mini-pip iframe{width:100%!important;height:100%!important;border:0!important;display:block!important}
+.youtube-mini-close{position:absolute!important;top:6px!important;right:6px!important;z-index:5!important;width:24px!important;height:24px!important;border-radius:999px!important;border:1px solid rgba(255,255,255,.25)!important;background:rgba(12,16,14,.78)!important;color:#fff!important;font-size:12px!important;display:grid!important;place-items:center!important;cursor:pointer!important}
+@keyframes pipPop{from{opacity:0;transform:translateY(12px) scale(.92)}to{opacity:1;transform:translateY(0) scale(1)}}

@@ -106,6 +106,7 @@ export default function HomePage() {
   const audio = useRef<HTMLAudioElement | null>(null);
   const yt = useRef<YouTubePlayerHandle | null>(null);
   const [youtubeActive, setYoutubeActive] = useState(false);
+  const [ytMiniWindow, setYtMiniWindow] = useState(false);
   /**
    * Обход запрета на встраивание. У официального клипа правообладатель часто закрывает embed,
    * и YouTube отдаёт 101/150 (или 100). Тогда не показываем ошибку и не останавливаем очередь,
@@ -514,7 +515,7 @@ export default function HomePage() {
           } catch {}
         }
       }
-      seq = ++requestSeq.current; if (!track.video_id) { embed.cancel(); yt.current?.stop(); } audio.current?.pause(); setSoundcloudUrl(null);
+      seq = ++requestSeq.current; setYtMiniWindow(false); if (!track.video_id) { embed.cancel(); yt.current?.stop(); } audio.current?.pause(); setSoundcloudUrl(null);
       if (list && list.length) { waveMode.current = false; setQueue(list, Math.max(0, list.findIndex((x) => x.id === track.id))); }
       if (track.video_id && !playedIds.current.includes(track.video_id)) playedIds.current.push(track.video_id);
       playback.current = { seconds: 0, last: 0, completed: false, started: false }; listenRecorded.current = false;
@@ -915,7 +916,7 @@ export default function HomePage() {
             </button>
           </div>
         </header>
-        <YouTubePlayer ref={yt} volume={muted ? 0 : Math.round(volume * resolveVolume({ volume, normalize: prefs.normalizeVolume, remote: true, fade: sleepRef.current * fadeRef.current }))} onProgress={(time, d) => { setElapsed(time); setDuration(d); if (advanceListening(playback.current, time, d, true, false) && currentRef.current) void logSignal(currentRef.current, 'complete', playback.current.seconds); recordListen(); if (prefs.crossfade > 0 && d > 0) { const remaining = d - time; fadeRef.current = remaining > 0 && remaining <= prefs.crossfade ? fadeOutGain(remaining, prefs.crossfade) : 1; applyLevel(); } }} onState={(state) => { if (state === 'playing') { embed.playing(); playback.current.started = true; setPlaying(true); setLoading(false); } else if (state === 'paused') { setPlaying(false); setLoading(false); } else { setPlaying(false); if (sleepStopRef.current) { sleepStopRef.current = false; setSleep(sleepOff()); say('sleepFading'); return; } if (repeat) { playback.current = { seconds: 0, last: 0, completed: false, started: true }; listenRecorded.current = false; yt.current?.seek(0); yt.current?.play(); } else void skip(1, true); } }} onError={(message, code) => { /* 101/150/100 забирает обход: пока он идёт, крутится загрузка, а не ошибка. */ if (embed.error(code)) { setLoading(true); return; } setLoading(false); setPlaying(false); setNotice(message); }} />
+        <YouTubePlayer ref={yt} miniWindow={ytMiniWindow} onCloseMini={() => setYtMiniWindow(false)} volume={muted ? 0 : Math.round(volume * resolveVolume({ volume, normalize: prefs.normalizeVolume, remote: true, fade: sleepRef.current * fadeRef.current }))} onProgress={(time, d) => { setElapsed(time); setDuration(d); if (advanceListening(playback.current, time, d, true, false) && currentRef.current) void logSignal(currentRef.current, 'complete', playback.current.seconds); recordListen(); if (prefs.crossfade > 0 && d > 0) { const remaining = d - time; fadeRef.current = remaining > 0 && remaining <= prefs.crossfade ? fadeOutGain(remaining, prefs.crossfade) : 1; applyLevel(); } }} onState={(state) => { if (state === 'playing') { embed.playing(); playback.current.started = true; setPlaying(true); setLoading(false); } else if (state === 'paused') { setPlaying(false); setLoading(false); } else { setPlaying(false); if (sleepStopRef.current) { sleepStopRef.current = false; setSleep(sleepOff()); say('sleepFading'); return; } if (repeat) { playback.current = { seconds: 0, last: 0, completed: false, started: true }; listenRecorded.current = false; yt.current?.seek(0); yt.current?.play(); } else void skip(1, true); } }} onError={(message, code) => { /* 101/150/100 забирает обход: пока он идёт, крутится загрузка, а не ошибка. */ if (embed.error(code)) { setYtMiniWindow(true); setLoading(true); return; } setLoading(false); setPlaying(false); setNotice(message); }} />
         <Presence reduced={reducedMotion} mode="wait" initial={false}>
           <motion.div className="content" key={navView === 'search' ? 'search' : view} initial={reducedMotion ? { opacity: 0 } : { opacity: 0, y: 12, filter: 'blur(6px)' }} animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }} exit={reducedMotion ? { opacity: 0 } : { opacity: 0, y: -6, filter: 'blur(4px)' }} transition={spring}>
             {artist && view === 'artist' ? <>
