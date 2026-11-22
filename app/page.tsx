@@ -935,7 +935,7 @@ export default function HomePage() {
           <button aria-label={current ? t('expandPlayer') : t('queueEmpty')} title={t('expandPlayer')} disabled={!current} onClick={() => setFullscreen(true)}><SquarePlay size={18} /></button>
           <div className="volume-control" onWheel={(e) => { e.preventDefault(); const next = Math.max(0, Math.min(100, (muted ? 0 : volume) + (e.deltaY < 0 ? 5 : -5))); setMuted(next === 0); setVolume(next); }}>
             <VolumeButton muted={muted || volume === 0} label={muted || volume === 0 ? t('unmute') : t('mute')} reduced={reducedMotion} onClick={toggleMute} />
-            <div className="glass-range-wrap volume-wrap" style={{ '--progress': `${muted ? 0 : volume}%` } as React.CSSProperties}><input className="volume-slider" aria-label={t('volume')} type="range" min="0" max="100" value={muted ? 0 : volume} onChange={(e) => { const v = Number(e.target.value); setMuted(v === 0); setVolume(v); }} /><span className="glass-thumb" aria-hidden="true" /></div>
+            <div className="glass-range-wrap volume-wrap" style={{ '--ratio': (muted ? 0 : volume) / 100 } as React.CSSProperties}><span className="glass-track" aria-hidden="true"><span className="glass-fill" /></span><input className="volume-slider" aria-label={t('volume')} type="range" min="0" max="100" value={muted ? 0 : volume} onChange={(e) => { const v = Number(e.target.value); setMuted(v === 0); setVolume(v); }} /><span className="glass-thumb" aria-hidden="true" /></div>
             <span className="volume-pct">{muted ? 0 : volume}%</span>
           </div>
         </div>
