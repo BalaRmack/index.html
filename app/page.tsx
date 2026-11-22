@@ -97,6 +97,7 @@ export default function HomePage() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [panel, setPanel] = useState<'now' | 'queue' | 'settings' | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
+  const [expandOrigin, setExpandOrigin] = useState<{ x: number; y: number } | null>(null);
   const [wizard, setWizard] = useState(false);
   const [profileName, setProfileName] = useState('');
   const [sleep, setSleep] = useState<SleepTimer>(() => readSleep());
@@ -899,7 +900,7 @@ export default function HomePage() {
         {panel === 'queue' && <QueuePanel key="queue" player={player} onClose={() => setPanel(null)} />}
         {panel === 'settings' && <SettingsPanel key="settings" player={player} prefs={prefs} setPref={setPref} blocks={blocks} onUnblock={(block) => void unblock(block)} onResetHistory={() => void resetHistory()} displayName={profileName} onDisplayName={(value) => void saveProfileName(value)} signedIn={!!user} onRestartOnboarding={() => { setPanel(null); setPrefs((prev) => ({ ...prev, onboardingCompleted: false })); setWizard(true); }} onClose={() => setPanel(null)} sleep={sleep} sleepLeft={sleepLeft} onSleep={setSleep} muted={muted} onMute={toggleMute} />}
       </Presence>
-      <Presence reduced={reducedMotion}>{fullscreen && current && <FullscreenPlayer player={player} mood={prefs.waveMood} onMood={(mood) => setPref('waveMood', mood)} onClose={() => setFullscreen(false)} />}</Presence>
+      <Presence reduced={reducedMotion}>{fullscreen && current && <FullscreenPlayer player={player} origin={expandOrigin} mood={prefs.waveMood} onMood={(mood) => setPref('waveMood', mood)} onClose={() => setFullscreen(false)} />}</Presence>
       {/* Мастер — блокирующий оверлей: снимаем его с дерева сразу, без exit-анимации. */}
       {wizard && <OnboardingWizard prefs={prefs} setPref={setPref} t={t} reduced={reducedMotion} onDone={finishOnboarding} onSkip={skipOnboarding} />}
 
@@ -934,7 +935,7 @@ export default function HomePage() {
           <button className={sleepActive ? 'on' : ''} aria-label={t('sleepTimer')} title={sleepActive ? t('sleepSet', { time: sleep.kind === 'track' ? t('sleepEndOfTrack') : formatRemaining(sleepLeft ?? 0) }) : t('sleepTimer')} onClick={() => setSleep(sleep.kind === 'off' ? sleepMinutes(SLEEP_MINUTES_DEFAULT) : sleepOff())}><Timer size={17} /></button>
           <button className={panel === 'queue' ? 'on' : ''} aria-label={t('queue')} title={t('queue')} onClick={() => setPanel(panel === 'queue' ? null : 'queue')}><ListMusic size={18} /></button>
           <button className={panel === 'now' ? 'on' : ''} aria-label={t('nowPlayingPanel')} title={t('nowPlayingPanel')} onClick={() => setPanel(panel === 'now' ? null : 'now')}><PanelRight size={18} /></button>
-          <button aria-label={current ? t('expandPlayer') : t('queueEmpty')} title={t('expandPlayer')} disabled={!current} onClick={() => setFullscreen(true)}><SquarePlay size={18} /></button>
+          <button aria-label={current ? t('expandPlayer') : t('queueEmpty')} title={t('expandPlayer')} disabled={!current} onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setExpandOrigin({ x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }); setFullscreen(true); }}><SquarePlay size={18} /></button>
           <div className="volume-control" onWheel={(e) => { e.preventDefault(); const next = Math.max(0, Math.min(100, (muted ? 0 : volume) + (e.deltaY < 0 ? 5 : -5))); setMuted(next === 0); setVolume(next); }}>
             <VolumeButton muted={muted || volume === 0} label={muted || volume === 0 ? t('unmute') : t('mute')} reduced={reducedMotion} onClick={toggleMute} />
             <div className="glass-range-wrap volume-wrap">

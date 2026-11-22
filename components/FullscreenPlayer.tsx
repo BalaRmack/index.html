@@ -48,11 +48,12 @@ export function useLyrics(track: Track | null): { lyrics: LoadedLyrics | null; l
 }
 
 /** Полноэкранный «Сейчас играет» с живым фоном из обложки и синхронным текстом. */
-export default function FullscreenPlayer({ player, onClose, mood, onMood }: {
+export default function FullscreenPlayer({ player, onClose, mood, onMood, origin }: {
   player: PlayerBindings;
   onClose: () => void;
   mood: PlayerBindings['prefs']['waveMood'];
   onMood: (mood: PlayerBindings['prefs']['waveMood']) => void;
+  origin?: { x: number; y: number } | null;
 }) {
   const { current, t } = player;
   const { lyrics, loading } = useLyrics(current);
@@ -95,11 +96,11 @@ export default function FullscreenPlayer({ player, onClose, mood, onMood }: {
       role="dialog"
       aria-modal="true"
       aria-label={t('playingNow')}
-      initial={player.reduced ? { opacity: 0 } : { opacity: 0, scale: 1.02 }}
-      animate={{ opacity: 1, scale: 1 }}
-      exit={player.reduced ? { opacity: 0 } : { opacity: 0, scale: 0.99 }}
-      transition={player.reduced ? { duration: 0 } : spring}
-      style={{ ['--fp-base' as string]: base, ['--fp-glow' as string]: palette?.glow ?? base, ['--fp-deep' as string]: palette?.deep ?? base } as React.CSSProperties}
+      initial={player.reduced ? { opacity: 0 } : { opacity: 0, scale: 0.04, borderRadius: '28px' }}
+      animate={{ opacity: 1, scale: 1, borderRadius: '0px' }}
+      exit={player.reduced ? { opacity: 0 } : { opacity: 0, scale: 0.04, borderRadius: '28px' }}
+      transition={player.reduced ? { duration: 0 } : { type: 'spring', stiffness: 310, damping: 31, mass: 0.85 }}
+      style={{ transformOrigin: origin ? `${origin.x}px ${origin.y}px` : '82% 94%', overflow: 'hidden', ['--fp-base' as string]: base, ['--fp-glow' as string]: palette?.glow ?? base, ['--fp-deep' as string]: palette?.deep ?? base } as React.CSSProperties}
     >
       <div className="fp-backdrop" aria-hidden="true">
         <motion.span
