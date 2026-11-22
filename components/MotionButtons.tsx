@@ -57,60 +57,32 @@ export function ImpulseButton({ label, title, className, reduced, onClick, disab
   );
 }
 
-/** Лайк: пружинный отскок, расходящееся кольцо и разлёт искр акцентного цвета. */
 export function LikeButton({ active, onToggle, label, reduced = false, size = 17 }: { active: boolean; onToggle: () => void; label: string; reduced?: boolean; size?: number }) {
-  const [burst, setBurst] = useState(0);
-  const [direction, setDirection] = useState(1);
-  const sparks = useRef(Array.from({ length: SPARKS }, (_, index) => {
-    const angle = (Math.PI * 2 * index) / SPARKS + 0.4;
-    return { x: Math.cos(angle) * 22, y: Math.sin(angle) * 22 };
-  })).current;
+  const [pulse, setPulse] = useState(0);
 
   return (
     <motion.button
       type="button"
-      className={active ? 'liked icon-burst' : 'icon-burst'}
+      className={active ? 'liked' : undefined}
       aria-label={label}
       title={label}
       aria-pressed={active}
-      onClick={() => { setDirection(active ? -1 : 1); setBurst((value) => value + 1); onToggle(); }}
-      initial={false}
-      animate={reduced || burst === 0
-        ? { scale: 1, rotate: 0 }
-        : direction > 0
-          ? { scale: [1, 1.45, 0.9, 1.1, 1], rotate: [0, -8, 4, 0, 0] }
-          : { scale: [1, 0.8, 1.04, 1], rotate: [0, 6, -3, 0] }}
-      transition={{ duration: 0.46, ease: 'easeOut' }}
-      whileTap={reduced ? undefined : { scale: 0.9 }}
+      onClick={() => {
+        if (!active) setPulse((v) => v + 1);
+        onToggle();
+      }}
+      whileTap={reduced ? undefined : { scale: 0.84 }}
+      transition={{ duration: 0.12 }}
     >
-      <Heart size={size} fill={active ? 'currentColor' : 'none'} />
-      <Presence reduced={reduced}>
-        {burst > 0 && direction > 0 && !reduced && (
-          <motion.span
-            key={`ring-${burst}`}
-            className="burst-ring"
-            aria-hidden="true"
-            initial={{ scale: 0.35, opacity: 0.75 }}
-            animate={{ scale: 2.1, opacity: 0 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.55, ease: 'easeOut' }}
-          />
-        )}
-      </Presence>
-      <Presence reduced={reduced}>
-        {burst > 0 && direction > 0 && !reduced && (
-          <motion.span key={`sparks-${burst}`} className="burst-sparks" aria-hidden="true">
-            {sparks.map((spark, index) => (
-              <motion.i
-                key={index}
-                initial={{ x: 0, y: 0, scale: 1, opacity: 1 }}
-                animate={{ x: spark.x, y: spark.y, scale: [1, 1.3, 0], opacity: [1, 0.9, 0] }}
-                transition={{ duration: 0.52 + index * 0.012, ease: [0.2, 0.9, 0.3, 1] }}
-              />
-            ))}
-          </motion.span>
-        )}
-      </Presence>
+      <motion.span
+        key={pulse}
+        style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+        initial={false}
+        animate={reduced || pulse === 0 ? { scale: 1 } : { scale: [0.85, 1.24, 1] }}
+        transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+      >
+        <Heart size={size} fill={active ? 'currentColor' : 'none'} strokeWidth={active ? 2.1 : 1.85} />
+      </motion.span>
     </motion.button>
   );
 }
