@@ -834,9 +834,9 @@ export default function HomePage() {
             <span><b>{p.name}</b><small>{t('tracksCount', { count: tracksInPlaylist(readGuestPlaylists(), user ? null : p.id).length || 0 })}</small></span>
           </button>)}
         </div>
-        <button className="create-playlist" onClick={createPlaylist}><span><Plus size={19} /></span> {t('createPlaylist')}</button>
+        <button className="create-playlist" title={t('createPlaylist')} aria-label={t('createPlaylist')} onClick={createPlaylist}><span className="side-cover"><Plus size={19} /></span><span>{t('createPlaylist')}</span></button>
         <div className="side-bottom">
-          <button className="side-settings" onClick={() => setPanel(panel === 'settings' ? null : 'settings')}><Settings size={16} /> {t('settings')}</button>
+          <button className="side-settings" title={t('settings')} aria-label={t('settings')} onClick={() => setPanel(panel === 'settings' ? null : 'settings')}><Settings size={18} /><span>{t('settings')}</span></button>
           <span className="side-footer">{t('appTagline')}</span>
         </div>
       </aside>

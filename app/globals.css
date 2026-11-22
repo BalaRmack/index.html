@@ -856,28 +856,49 @@ button.primary:hover:not(:disabled), .wave-button:hover:not(:disabled) {
 html[data-sidebar="compact"] .brand > span:last-child,
 html[data-sidebar="compact"] .side-label,
 html[data-sidebar="compact"] .nav-text,
-html[data-sidebar="compact"] .library-links span > span,
-html[data-sidebar="compact"] .create-playlist span:not(.side-cover),
+html[data-sidebar="compact"] .library-links button > span:not(.side-cover),
+html[data-sidebar="compact"] .create-playlist > span:not(.side-cover),
 html[data-sidebar="compact"] .side-bottom p,
 html[data-sidebar="compact"] .side-footer,
-html[data-sidebar="compact"] .side-settings span {
+html[data-sidebar="compact"] .side-settings > span {
   display: none !important;
 }
 
-html[data-sidebar="compact"] .nav button,
+html[data-sidebar="compact"] .library-links {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  gap: 8px !important;
+}
+
 html[data-sidebar="compact"] .library-links button,
 html[data-sidebar="compact"] .create-playlist,
+html[data-sidebar="compact"] .nav button,
 html[data-sidebar="compact"] .side-settings {
+  display: flex !important;
   justify-content: center !important;
   align-items: center !important;
-  padding: 0 !important;
-  gap: 0 !important;
   width: 44px !important;
   height: 44px !important;
+  min-width: 44px !important;
+  padding: 0 !important;
   margin-inline: auto !important;
+  gap: 0 !important;
+  border-radius: 14px !important;
+}
+
+html[data-sidebar="compact"] .library-links .side-cover,
+html[data-sidebar="compact"] .create-playlist .side-cover {
+  display: grid !important;
+  place-items: center !important;
+  width: 38px !important;
+  height: 38px !important;
+  margin: 0 !important;
+  flex: none !important;
 }
 
 html[data-sidebar="compact"] .side-bottom {
+  margin-top: auto !important;
   padding-bottom: 108px !important;
   display: flex !important;
   flex-direction: column !important;
