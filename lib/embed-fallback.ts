@@ -21,7 +21,7 @@ export const EMBED_FALLBACK_BUDGET_MS = 12000;
 /** Рабочая замена живёт месяц, затем трек снова пробуется оригиналом. */
 export const EMBED_CACHE_TTL_MS = 30 * 24 * 3600 * 1000;
 export const EMBED_CACHE_LIMIT = 200;
-export const EMBED_CACHE_KEY = 'nocturne.embed-versions.v1';
+export const EMBED_CACHE_KEY = 'nocturne.embed-versions.v2';
 /** После двух неудач доверие к сохранённой замене теряется (правообладатель мог всё закрыть). */
 export const EMBED_CACHE_MAX_FAILS = 2;
 
@@ -110,10 +110,14 @@ export function pickEmbedCandidates(payload: unknown, options: { title?: string;
     const near = options.duration && safeDuration ? (Math.abs(safeDuration - options.duration) <= Math.max(45, options.duration * 0.35) ? 1 : -1) : 0;
     const nameMatch = wanted ? (lower.includes(wanted) ? 1 : 0) : 1;
     const artistMatch = artist ? (lower.includes(artist) || text(row.artist, 200).toLocaleLowerCase('ru').includes(artist) ? 1 : -1) : 0;
-    // Мусор отсеиваем только явный: ни названия, ни исполнителя, ни длительности — это не тот трек.
-    if (nameMatch === 0 && artistMatch === -1 && near === -1) continue;
+    // Обязательно должно совпадать название трека; ремиксы/каверы/nightcore отсеиваем, если их не искали.
+    if (wanted && nameMatch === 0) continue;
+    const isAltVersion = /(?:remix|nightcore|slowed|sped\s*up|cover|кавер|ремикс|mashup|bass\s*boost|8d\s*audio)/i.test(lower);
+    const wantedAlt = /(?:remix|nightcore|slowed|sped\s*up|cover|кавер|ремикс|mashup|bass\s*boost|8d\s*audio)/i.test(wanted);
+    if (isAltVersion && !wantedAlt) continue;
+    if (artist && artistMatch === -1 && near === -1) continue;
     seen.add(videoId);
-    scored.push({ item: { video_id: videoId, title, artist: text(row.artist, 200) || text(options.artist, 200), duration: safeDuration }, score: nameMatch * 2 + artistMatch + markerScore(title) + near });
+    scored.push({ item: { video_id: videoId, title, artist: text(row.artist, 200) || text(options.artist, 200), duration: safeDuration }, score: nameMatch * 4 + artistMatch * 3 + markerScore(title) + near * 2 });
   }
   return scored
     .sort((a, b) => b.score - a.score)
