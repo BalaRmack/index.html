@@ -139,7 +139,6 @@ export default function FullscreenPlayer({ player, onClose, mood, onMood, origin
             {current && (
               <button className="fp-artist" onClick={() => player.onOpenArtist(current.artist)}>{current.artist}</button>
             )}
-          </div>
           </motion.div>
           <motion.div className="fp-progress" initial={player.reduced ? false : { opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, transition: { duration: 0.1 } }} transition={{ duration: 0.36, delay: 0.3, ease: [0.22, 1, 0.36, 1] }}>
             <span>{formatDuration(player.elapsed)}</span>
@@ -154,7 +153,6 @@ export default function FullscreenPlayer({ player, onClose, mood, onMood, origin
               style={{ ['--progress' as string]: `${progress}%` } as React.CSSProperties}
             />
             <span>{formatDuration(player.duration)}</span>
-          </div>
           </motion.div>
           <motion.div className="fp-controls" initial={player.reduced ? false : { opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, transition: { duration: 0.1 } }} transition={{ duration: 0.36, delay: 0.34, ease: [0.22, 1, 0.36, 1] }}>
             {current && (
@@ -171,7 +169,6 @@ export default function FullscreenPlayer({ player, onClose, mood, onMood, origin
                 </button>
               ))}
             </span></LayoutGroup>
-          </div>
           </motion.div>
           <motion.p className="fp-hint" initial={player.reduced ? false : { opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, transition: { duration: 0.08 } }} transition={{ duration: 0.32, delay: 0.38 }}>{t('waveMoodHint')}</motion.p>
         </section>
