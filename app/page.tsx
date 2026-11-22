@@ -453,27 +453,55 @@ export default function HomePage() {
         if (audio.current!.paused) { if (ctx.current && !track.video_id) await ctx.current.resume(); await audio.current!.play(); playback.current.started = true; setPlaying(true); } else { audio.current!.pause(); setPlaying(false); } return;
       }
       if (playback.current.started && currentRef.current?.id !== track.id) recordSwitch();
-      // Если у трека кривой/длинный video_id (например > 3:30) или он из каталога — проверяем чистый студийный оригинал в Deezer
+      // Приоритет полной версии оригинала: 1) полный студийный поток JioSaavn, 2) строгий YouTube именно с именем артиста, 3) 30с превью Deezer в onExhausted
       if (track.video_id && !track.storage_path && track.artist && track.title) {
+        const aLow = track.artist.toLowerCase().trim();
+        const tLow = track.title.toLowerCase().trim();
+        let resolvedFull = false;
         try {
           const q = encodeURIComponent(`${track.artist} ${track.title}`);
-          const res = await fetch(`/api/catalog/alternative/search?source=deezer&q=${q}`);
-          if (res.ok) {
-            const data = await res.json();
-            const list = Array.isArray(data?.tracks) ? data.tracks : [];
-            const aLow = track.artist.toLowerCase();
-            const tLow = track.title.toLowerCase();
-            const dz = list.find((c: Track) =>
-              (c.external_id || c.id?.startsWith('dz:')) &&
+          const jsRes = await fetch(`/api/catalog/alternative/search?source=jiosaavn&q=${q}`);
+          if (jsRes.ok) {
+            const jsData = await jsRes.json();
+            const jsList = Array.isArray(jsData?.tracks) ? jsData.tracks : [];
+            const jsHit = jsList.find((c: Track) =>
+              (c.external_id || c.id?.startsWith('js:')) &&
               c.title.toLowerCase().includes(tLow) &&
               c.artist.toLowerCase().includes(aLow)
             );
-            const dzId = dz?.external_id || (dz?.id?.startsWith('dz:') ? dz.id.slice(3) : null);
-            if (dzId) {
-              track = { ...track, video_id: null, source: 'deezer', external_id: dzId, duration: dz.duration || 30, thumbnail: dz.thumbnail || track.thumbnail };
+            const jsId = jsHit?.external_id || (jsHit?.id?.startsWith('js:') ? jsHit.id.slice(3) : null);
+            if (jsId) {
+              track = { ...track, video_id: null, source: 'jiosaavn', external_id: jsId, duration: jsHit.duration || track.duration, thumbnail: jsHit.thumbnail || track.thumbnail };
+              resolvedFull = true;
             }
           }
         } catch {}
+
+        // Если в JioSaavn нет — ищем на YouTube строгий оригинал, где ОБЯЗАТЕЛЬНО присутствует имя артиста (volhey)
+        if (!resolvedFull) {
+          try {
+            const ytQ = encodeURIComponent(`${track.artist} - ${track.title}`);
+            const ytRes = await fetch(`/api/catalog/search?q=${ytQ}`);
+            if (ytRes.ok) {
+              const ytData = await ytRes.json();
+              const ytList = Array.isArray(ytData?.tracks) ? ytData.tracks : [];
+              const strictYt = ytList.find((c: Track) =>
+                c.video_id &&
+                (c.duration || 0) > 45 &&
+                (c.duration || 0) < 240 &&
+                c.title.toLowerCase().includes(tLow) &&
+                (c.artist.toLowerCase().includes(aLow) || c.title.toLowerCase().includes(aLow)) &&
+                !/(remix|nightcore|slowed|sped|cover|кавер|ремикс|mashup)/i.test(c.title)
+              );
+              if (strictYt?.video_id) {
+                track = { ...track, video_id: strictYt.video_id, duration: strictYt.duration || track.duration, thumbnail: strictYt.thumbnail || track.thumbnail };
+                if (user && supabase) {
+                  void supabase.from('tracks').update({ video_id: track.video_id, duration: track.duration, artwork: track.thumbnail || null }).eq('id', track.id).eq('owner_id', user.id);
+                }
+              }
+            }
+          } catch {}
+        }
       }
       seq = ++requestSeq.current; if (!track.video_id) { embed.cancel(); yt.current?.stop(); } audio.current?.pause(); setSoundcloudUrl(null);
       if (list && list.length) { waveMode.current = false; setQueue(list, Math.max(0, list.findIndex((x) => x.id === track.id))); }
