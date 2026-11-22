@@ -908,7 +908,7 @@ export default function HomePage() {
               <div className="player-art" style={{ backgroundImage: current ? `url('${imageFor(current)}')` : undefined }} />
               <div className="now-text">
                 <b>{current?.title || t('queueEmpty')}</b>
-                {current ? <button className="now-artist" onClick={() => openArtist(current.artist)}>{artistLabel(current.artist)}</button> : <small>{t('subtitle')}</small>}
+                {current ? <button className="now-artist" onClick={() => openArtist(current.artist)}>{artistLabel(current.artist)}</button> : <small>{t('appTagline')}</small>}
               </div>
             </motion.div>
           </Presence>
