@@ -1,245 +1,118 @@
 'use client';
-
 import { useEffect, useRef } from 'react';
-import { hexToRgb, withAlpha } from '@/lib/palette';
+import { hexToRgb } from '@/lib/palette';
 import type { ParticlesMode, WaveMood } from '@/lib/preferences';
 
-/**
- * Живая визуализация «Моей волны» вместо статичной картинки: дышащая сфера,
- * бегущие волны и частицы, которые реагируют на воспроизведение и настроение.
- * Если у нас есть AnalyserNode (локальный файл через Web Audio) — берём уровень из него,
- * для внешних стримов энергия синтетическая, но привязана к тому же такту.
- */
-type Props = {
-  playing: boolean;
-  mood: WaveMood;
-  accent: string;
-  particles?: ParticlesMode;
-  reduced?: boolean;
-  analyser?: AnalyserNode | null;
-  className?: string;
-  /** Дополнительный множитель амплитуды (например, при наведении курсора). */
-  boost?: number;
-};
+type Props = { playing: boolean; mood: WaveMood; accent: string; particles?: ParticlesMode; reduced?: boolean; analyser?: AnalyserNode | null; className?: string; boost?: number };
+type RGB = [number, number, number];
 
-const MOODS: Record<WaveMood, { speed: number; amplitude: number; spread: number; hue: number; waves: number }> = {
-  energetic: { speed: 1.55, amplitude: 1.45, spread: 1.15, hue: 8, waves: 5 },
-  calm: { speed: 0.42, amplitude: 0.6, spread: 0.7, hue: -10, waves: 3 },
-  unknown: { speed: 0.9, amplitude: 1.05, spread: 1.35, hue: 22, waves: 4 },
-  loved: { speed: 1.05, amplitude: 0.95, spread: 0.85, hue: -4, waves: 4 },
-};
+const SPEED: Record<WaveMood, number> = { energetic: 1.55, calm: 0.48, unknown: 0.92, loved: 1.08 };
 
-const PARTICLE_COUNT: Record<ParticlesMode, number> = { full: 96, eco: 34, off: 0 };
-
-type Particle = { angle: number; radius: number; speed: number; size: number; drift: number; phase: number };
+function palette(mood: WaveMood, accent: string): [RGB, RGB, RGB, RGB] {
+  const rgb = hexToRgb(accent || '#b7e49a') as RGB;
+  if (Math.abs(rgb[0] - rgb[1]) < 12 && Math.abs(rgb[1] - rgb[2]) < 12 && rgb[0] > 180) return [[255, 255, 255], [200, 200, 200], [140, 140, 140], [235, 235, 235]];
+  if (mood === 'energetic') return [[255, 92, 138], [255, 168, 52], [186, 62, 255], rgb];
+  if (mood === 'calm') return [[64, 210, 255], [110, 128, 255], rgb, [145, 255, 215]];
+  if (mood === 'loved') return [[255, 72, 168], [255, 130, 92], [176, 78, 255], rgb];
+  return [[228, 72, 255], [255, 84, 148], rgb, [92, 235, 210]];
+}
 
 export default function WaveVisualizer({ playing, mood, accent, particles = 'full', reduced = false, analyser = null, className, boost = 1 }: Props) {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const pointer = useRef({ x: 0.5, y: 0.5, active: false });
-  const stateRef = useRef({ playing, mood, accent, particles, reduced, analyser, boost });
-  stateRef.current = { playing, mood, accent, particles, reduced, analyser, boost };
+  const ref = useRef<HTMLCanvasElement | null>(null);
+  const ptr = useRef({ x: 0.5, y: 0.5, on: false });
+  const st = useRef({ playing, mood, accent, particles, reduced, analyser, boost });
+  st.current = { playing, mood, accent, particles, reduced, analyser, boost };
 
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const context = canvas.getContext('2d', { alpha: true });
-    if (!context) return;
-
-    let width = 0;
-    let height = 0;
-    let frame = 0;
-    let stopped = false;
-    const field: Particle[] = [];
-    let energy = 0;
-    let level = new Uint8Array(0);
+    const c = ref.current;
+    const ctx = c?.getContext('2d', { alpha: true });
+    if (!c || !ctx) return;
+    let w = 1, h = 1, raf = 0, stop = false, energy = 0.25, bass = 0.2, time = 0, last = performance.now();
+    let bins = new Uint8Array(0);
 
     const resize = () => {
-      const mode = stateRef.current.particles;
-      const ratio = Math.min(window.devicePixelRatio || 1, mode === 'eco' ? 1.35 : 2);
-      const rect = canvas.getBoundingClientRect();
-      width = Math.max(1, Math.round(rect.width));
-      height = Math.max(1, Math.round(rect.height));
-      canvas.width = Math.round(width * ratio);
-      canvas.height = Math.round(height * ratio);
-      context.setTransform(ratio, 0, 0, ratio, 0, 0);
+      const r = Math.min(window.devicePixelRatio || 1, st.current.particles === 'eco' ? 1.25 : 1.75);
+      const rect = c.getBoundingClientRect();
+      w = Math.max(1, Math.round(rect.width));
+      h = Math.max(1, Math.round(rect.height));
+      c.width = Math.round(w * r);
+      c.height = Math.round(h * r);
+      ctx.setTransform(r, 0, 0, r, 0, 0);
     };
-
-    const seed = (count: number) => {
-      field.length = 0;
-      for (let index = 0; index < count; index++) {
-        field.push({
-          angle: Math.random() * Math.PI * 2,
-          radius: 0.28 + Math.random() * 0.72,
-          speed: 0.0016 + Math.random() * 0.0042,
-          size: 0.7 + Math.random() * 2.1,
-          drift: 0.6 + Math.random() * 1.7,
-          phase: Math.random() * Math.PI * 2,
-        });
-      }
-    };
-
-    const readLevel = () => {
-      const node = stateRef.current.analyser;
-      if (!node) return null;
-      if (level.length !== node.frequencyBinCount) level = new Uint8Array(node.frequencyBinCount);
-      node.getByteFrequencyData(level as Uint8Array<ArrayBuffer>);
-      // Бас и нижняя середина — то, по чему волна «дышит» в perceptible way.
-      const bins = Math.max(4, Math.floor(level.length * 0.28));
-      let sum = 0;
-      for (let index = 0; index < bins; index++) sum += level[index];
-      return sum / bins / 255;
-    };
-
     resize();
-    seed(PARTICLE_COUNT[stateRef.current.particles] ?? 60);
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(resize) : null;
+    ro?.observe(c);
+    const rgba = (rgb: RGB, a: number) => `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${Math.max(0, Math.min(1, a)).toFixed(3)})`;
 
-    const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => {
-      resize();
-      const wanted = PARTICLE_COUNT[stateRef.current.particles] ?? 0;
-      if (Math.abs(field.length - wanted) > 8) seed(wanted);
-    }) : null;
-    observer?.observe(canvas);
-
-    let time = 0;
-    const draw = (delta: number) => {
-      const state = stateRef.current;
-      const wantedCount = PARTICLE_COUNT[state.particles] ?? 0;
-      if (field.length !== wantedCount) seed(wantedCount);
-      const config = MOODS[state.mood] ?? MOODS.unknown;
-      const accentRgb = hexToRgb(state.accent || '#b7e49a');
-      const shift = config.hue / 100;
-      const tint = (value: number, index: number) => Math.max(0, Math.min(255, Math.round(value * (1 + (index === 1 ? shift : -shift)))));
-      const color = (alpha: number) => `rgba(${tint(accentRgb[0], 0)},${tint(accentRgb[1], 1)},${tint(accentRgb[2], 2)},${alpha})`;
-
-      const measured = state.playing ? readLevel() : null;
-      const idle = 0.34 + 0.16 * Math.sin(time * 0.7) + 0.08 * Math.sin(time * 1.9 + 1.2);
-      const target = state.playing ? (measured === null ? 0.45 + 0.3 * Math.abs(Math.sin(time * 1.7)) + 0.12 * Math.sin(time * 4.3) : 0.18 + measured * 1.25) : idle * 0.55;
-      energy += (target - energy) * (state.reduced ? 1 : 0.085);
-      energy = Math.max(0.02, Math.min(1.8, energy));
-
-      const cx = width * (0.5 + (state.boost > 1 ? (pointer.current.x - 0.5) * 0.05 : 0));
-      const cy = height * 0.52;
-      const base = Math.min(width, height) * 0.22;
-      const amp = base * config.amplitude * energy * (state.boost || 1);
-
-      context.clearRect(0, 0, width, height);
-      context.globalCompositeOperation = 'lighter';
-
-      // Дышащее ядро: три вложенных кольца с мягким свечением.
-      for (let ring = 0; ring < 3; ring++) {
-        const radius = base * (0.52 + ring * 0.26) * (1 + energy * 0.16);
-        const gradient = context.createRadialGradient(cx, cy, radius * 0.2, cx, cy, radius);
-        gradient.addColorStop(0, color(0.2 - ring * 0.05));
-        gradient.addColorStop(1, 'rgba(0,0,0,0)');
-        context.fillStyle = gradient;
-        context.beginPath();
-        context.arc(cx, cy, radius, 0, Math.PI * 2);
-        context.fill();
+    const draw = (dt: number) => {
+      const s = st.current;
+      const spd = SPEED[s.mood] ?? 1;
+      const [core, mid, outer, spark] = palette(s.mood, s.accent);
+      let low = 0, hi = 0, hasAudio = false;
+      if (s.playing && s.analyser) {
+        if (bins.length !== s.analyser.frequencyBinCount) bins = new Uint8Array(s.analyser.frequencyBinCount);
+        s.analyser.getByteFrequencyData(bins as Uint8Array<ArrayBuffer>);
+        const n1 = Math.max(4, Math.floor(bins.length * 0.14)), n2 = Math.max(8, Math.floor(bins.length * 0.42));
+        for (let i = 0; i < n1; i++) low += bins[i];
+        for (let i = n1; i < n2; i++) hi += bins[i];
+        low = low / n1 / 255; hi = hi / Math.max(1, n2 - n1) / 255; hasAudio = true;
       }
+      const idle = 0.28 + 0.08 * Math.sin(time * 0.85);
+      const tE = s.playing ? (hasAudio ? 0.26 + hi * 1.15 : 0.48 + 0.24 * Math.abs(Math.sin(time * 1.65))) : idle;
+      const tB = s.playing ? (hasAudio ? 0.2 + low * 1.45 : 0.42 + 0.34 * Math.pow(Math.abs(Math.sin(time * 1.85)), 2)) : idle * 0.7;
+      const k = s.reduced ? 1 : 0.09;
+      energy += (tE - energy) * k; bass += (tB - bass) * k;
 
-      // Бегущие волны: сумма двух синусоид с разным шагом — «жидкий» силуэт.
-      const waves = state.reduced ? 1 : config.waves;
-      for (let wave = 0; wave < waves; wave++) {
-        const offset = wave * 0.6;
-        const amplitude = amp * (0.42 + wave * 0.12);
-        const baseline = cy + (wave - (waves - 1) / 2) * (height * 0.06);
-        context.beginPath();
-        for (let x = 0; x <= width; x += 6) {
-          const t = (x / width) * Math.PI * 2;
-          const y = baseline
-            + Math.sin(t * 1.5 + time * config.speed + offset) * amplitude * 0.55
-            + Math.sin(t * 3.1 - time * config.speed * 0.7 + offset) * amplitude * 0.28;
-          if (x === 0) context.moveTo(x, y);
-          else context.lineTo(x, y);
-        }
-        context.strokeStyle = color(0.1 + 0.06 * energy);
-        context.lineWidth = 1.2 + wave * 0.35;
-        context.stroke();
-      }
+      const cx = w * (w > h * 1.65 ? 0.68 : 0.5) + (ptr.current.on ? (ptr.current.x - 0.5) * 32 : 0);
+      const cy = h * 0.5 + (ptr.current.on ? (ptr.current.y - 0.5) * 22 : 0);
+      const R = Math.min(w, h) * (w > h * 1.65 ? 0.52 : 0.38) * (s.boost || 1);
 
-      // Частицы: орбита + параллакс от курсора + лёгкое притяжение к ядру.
-      if (!state.reduced) {
-        for (const particle of field) {
-          particle.angle += particle.speed * (0.4 + energy * 1.6) * config.speed;
-          const parallaxX = (pointer.current.x - 0.5) * 42 * particle.drift * (pointer.current.active ? 1 : 0.25);
-          const parallaxY = (pointer.current.y - 0.5) * 26 * particle.drift * (pointer.current.active ? 1 : 0.25);
-          const radius = base * particle.radius * (1.6 + energy * 0.5) * config.spread;
-          const x = cx + Math.cos(particle.angle) * radius + parallaxX;
-          const y = cy + Math.sin(particle.angle * 1.35 + particle.phase) * radius * 0.42 + parallaxY + Math.sin(time + particle.phase) * 3;
-          const size = particle.size * (0.7 + energy * 0.9);
-          context.fillStyle = color(0.16 + 0.3 * energy);
-          context.beginPath();
-          context.arc(x, y, size, 0, Math.PI * 2);
-          context.fill();
+      ctx.clearRect(0, 0, w, h);
+      ctx.globalCompositeOperation = 'lighter';
+
+      [[time * 0.35 * spd, 0.22, 1.28 + bass * 0.24, 1.05 + energy * 0.18, mid, 0.36 + energy * 0.14],
+       [-time * 0.28 * spd + 2.1, 0.28, 1.15 + energy * 0.2, 1.32 + bass * 0.22, outer, 0.3 + bass * 0.14],
+       [time * 0.42 * spd + 4.2, 0.16, 0.95 + bass * 0.26, 0.95 + energy * 0.22, core, 0.44 + energy * 0.18],
+       [-time * 0.5 * spd + 1.1, 0.3, 0.85, 1.1, spark, 0.2 + energy * 0.1]].forEach(([ang, dist, rx, ry, col, a]) => {
+        const A = ang as number, D = (dist as number) * R, RX = (rx as number) * R, RY = (ry as number) * R;
+        ctx.save(); ctx.translate(cx + Math.cos(A) * D, cy + Math.sin(A * 1.15) * D * 0.85); ctx.rotate(A * 0.6); ctx.scale(1, RY / Math.max(1, RX));
+        const g = ctx.createRadialGradient(0, 0, RX * 0.06, 0, 0, RX);
+        g.addColorStop(0, rgba(col as RGB, a as number)); g.addColorStop(0.55, rgba(col as RGB, (a as number) * 0.42)); g.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, RX, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+      });
+
+      if (s.particles !== 'off') {
+        const rays = s.particles === 'eco' ? 6 : 11;
+        for (let i = 0; i < rays; i++) {
+          const a = (i / rays) * Math.PI * 2 + time * 0.18 * spd + Math.sin(time * 0.7 + i) * 0.18;
+          const len = R * (1.15 + 0.45 * Math.sin(time * 1.4 * spd + i * 1.9) + bass * 0.45);
+          const sp = 0.14 + 0.06 * Math.cos(time + i);
+          const g = ctx.createRadialGradient(cx, cy, R * 0.1, cx, cy, len);
+          g.addColorStop(0, rgba(i % 2 ? mid : core, 0.25 + energy * 0.16)); g.addColorStop(0.5, rgba(outer, 0.1 + bass * 0.08)); g.addColorStop(1, 'rgba(0,0,0,0)');
+          ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, len, a - sp, a + sp); ctx.closePath(); ctx.fill();
         }
       }
 
-      // Пульс-кольца на пиках энергии: волна буквально расходится кругами.
-      if (state.playing && !state.reduced && energy > 0.72) {
-        const pulse = (time * 0.9) % 1;
-        context.strokeStyle = color(0.32 * (1 - pulse));
-        context.lineWidth = 1.6;
-        context.beginPath();
-        context.arc(cx, cy, base * (0.6 + pulse * 2.4), 0, Math.PI * 2);
-        context.stroke();
+      for (let ring = 0; ring < 2; ring++) {
+        ctx.beginPath();
+        for (let i = 0; i <= 80; i++) {
+          const th = (i / 80) * Math.PI * 2;
+          const r = R * (0.56 + ring * 0.22 + bass * 0.16) * (1 + Math.sin(th * 6 + time * 1.9 * spd + ring) * (0.07 + bass * 0.08) + Math.cos(th * 3 - time * 1.3 * spd) * (0.06 + energy * 0.06));
+          i === 0 ? ctx.moveTo(cx + Math.cos(th) * r, cy + Math.sin(th) * r) : ctx.lineTo(cx + Math.cos(th) * r, cy + Math.sin(th) * r);
+        }
+        ctx.closePath(); ctx.strokeStyle = rgba(ring === 0 ? [255, 255, 255] : core, 0.24 + energy * 0.18); ctx.lineWidth = ring === 0 ? 1.8 : 1.2; ctx.stroke();
       }
 
-      context.globalCompositeOperation = 'source-over';
-      // Мягкая виньетка, чтобы текст поверх баннера читался.
-      const vignette = context.createLinearGradient(0, 0, width, 0);
-      vignette.addColorStop(0, 'rgba(8,14,10,.92)');
-      vignette.addColorStop(0.62, withAlpha('#0d100f', 0.35));
-      vignette.addColorStop(1, 'rgba(8,14,10,0)');
-      context.fillStyle = vignette;
-      context.fillRect(0, 0, width, height);
+      const cR = R * (0.48 + bass * 0.18), cg = ctx.createRadialGradient(cx, cy, 0, cx, cy, cR);
+      cg.addColorStop(0, rgba([255, 255, 255], 0.32 + bass * 0.22)); cg.addColorStop(0.45, rgba(core, 0.36 + energy * 0.18)); cg.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = cg; ctx.beginPath(); ctx.arc(cx, cy, cR, 0, Math.PI * 2); ctx.fill();
+
+      time += Math.min(0.05, dt);
+      if (!stop && !s.reduced) raf = requestAnimationFrame((now) => { const d = (now - last) / 1000; last = now; draw(d || 0.016); });
     };
+    draw(0.016);
+    return () => { stop = true; cancelAnimationFrame(raf); ro?.disconnect(); };
+  }, [reduced]);
 
-    let last = performance.now();
-    const loop = (now: number) => {
-      if (stopped) return;
-      const delta = Math.min(64, now - last);
-      last = now;
-      const state = stateRef.current;
-      const wantedCount = PARTICLE_COUNT[state.particles] ?? 0;
-      if (field.length !== wantedCount) seed(wantedCount);
-      // Пауза на скрытой вкладке и в режиме «только градиент» — не жечь батарею.
-      if (state.particles === 'off' && !state.playing) {
-        draw(delta);
-        frame = requestAnimationFrame(loop);
-        time += 0.0006 * delta;
-        return;
-      }
-      if (document.visibilityState !== 'hidden') {
-        time += (state.reduced ? 0.0002 : 0.0011) * delta * (MOODS[state.mood]?.speed ?? 1) * (state.playing ? 1 : 0.45);
-        draw(delta);
-      }
-      frame = requestAnimationFrame(loop);
-    };
-    frame = requestAnimationFrame(loop);
-
-    const onPointer = (event: PointerEvent) => {
-      const rect = canvas.getBoundingClientRect();
-      pointer.current = { x: (event.clientX - rect.left) / Math.max(1, rect.width), y: (event.clientY - rect.top) / Math.max(1, rect.height), active: true };
-    };
-    const onLeave = () => { pointer.current = { ...pointer.current, active: false }; };
-    canvas.addEventListener('pointermove', onPointer);
-    canvas.addEventListener('pointerleave', onLeave);
-
-    return () => {
-      stopped = true;
-      cancelAnimationFrame(frame);
-      observer?.disconnect();
-      canvas.removeEventListener('pointermove', onPointer);
-      canvas.removeEventListener('pointerleave', onLeave);
-    };
-  }, []);
-
-  // Смена режима частиц требует пересоздания поля — делаем это мягко через key.
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    canvas.dataset.particles = particles;
-  }, [particles]);
-
-  return <canvas ref={canvasRef} className={`wave-canvas${className ? ` ${className}` : ''}`} aria-hidden="true" data-playing={playing ? '1' : '0'} data-mood={mood} />;
+  return <canvas ref={ref} className={className} aria-hidden="true" onPointerMove={(e) => { const r = e.currentTarget.getBoundingClientRect(); if (r.width && r.height) ptr.current = { x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height, on: true }; }} onPointerLeave={() => { ptr.current.on = false; }} />;
 }
