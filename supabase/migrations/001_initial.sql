@@ -12,7 +12,9 @@ create policy "Manage own tracks" on public.tracks for all to authenticated usin
 create policy "Manage own playlists" on public.playlists for all to authenticated using (owner_id = auth.uid()) with check (owner_id = auth.uid());
 create policy "Manage playlist tracks" on public.playlist_tracks for all to authenticated using (exists (select 1 from public.playlists where id = playlist_id and owner_id = auth.uid())) with check (exists (select 1 from public.playlists where id = playlist_id and owner_id = auth.uid()) and exists (select 1 from public.tracks where id = track_id and (owner_id is null or owner_id = auth.uid())));
 create policy "Manage own likes" on public.likes for all to authenticated using (user_id = auth.uid()) with check (user_id = auth.uid() and exists (select 1 from public.tracks where id = track_id and (owner_id is null or owner_id = auth.uid())));
-insert into public.tracks (id,title,artist) values ('demo-outfoxing','Outfoxing the Fox','Kevin MacLeod');
+-- Демо-трек из «Вашей музыки» убран: библиотека показывает только реальные лайки и загрузки.
+-- (Для уже развёрнутых баз его удаляет миграция 006.)
+-- insert into public.tracks (id,title,artist) values ('demo-outfoxing','Outfoxing the Fox','Kevin MacLeod');
 insert into storage.buckets (id,name,public,file_size_limit,allowed_mime_types) values ('audio','audio',false,52428800, array['audio/mpeg','audio/mp4','audio/ogg','audio/wav','audio/x-wav','audio/webm','audio/flac']);
 create policy "Users read own audio" on storage.objects for select to authenticated using (bucket_id = 'audio' and (storage.foldername(name))[1] = auth.uid()::text);
 create policy "Users upload own audio" on storage.objects for insert to authenticated with check (bucket_id = 'audio' and (storage.foldername(name))[1] = auth.uid()::text);

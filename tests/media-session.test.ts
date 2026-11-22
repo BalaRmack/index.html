@@ -26,7 +26,12 @@ test('Media Session controls the current YouTube queue and follows metadata and 
   const root=createRoot(dom.window.document.getElementById('root')!);
   try {
     await act(async()=>{root.render(React.createElement(HomePage));});
-    const cards=dom.window.document.querySelectorAll('.catalog-card-main');assert.equal(cards.length,8);assert.ok(dom.window.document.querySelector('[aria-label="Главная"]'));assert.ok(dom.window.document.querySelector('[aria-label="Поиск"]'));assert.ok(dom.window.document.body.textContent!.includes('Открыть медиатеку'));assert.equal(dom.window.document.querySelectorAll('.shelf-scroll .catalog-card').length,8);
+    const cards=dom.window.document.querySelectorAll('.catalog-card-main');
+    // Полки с пустыми местами дозаполняются свежими миксами, поэтому проверяем первую полку точно, а всего — не меньше ответа.
+    const firstShelf=dom.window.document.querySelectorAll('.shelf')[0];
+    assert.equal(firstShelf.querySelectorAll('.catalog-card-main').length,8);
+    assert.ok(cards.length>=8);
+    assert.ok(dom.window.document.querySelector('[aria-label="Главная"]'));assert.ok(dom.window.document.querySelector('[aria-label="Поиск"]'));assert.ok(dom.window.document.body.textContent!.includes('Открыть медиатеку'));assert.ok(dom.window.document.querySelectorAll('.shelf-scroll .catalog-card').length>=8);
     await act(async()=>{(cards[0] as HTMLElement).click();});
     assert.ok(dom.window.document.querySelector('.main > .youtube-background[aria-hidden="true"]'));assert.equal(dom.window.document.querySelector('.youtube-panel'),null);assert.ok(dom.window.document.querySelector('.player [aria-label="Перемотка"]'));assert.ok(dom.window.document.querySelector('.player [aria-label="Громкость"]'));assert.equal(dom.window.document.body.textContent!.includes('Найти в Deezer'),false);assert.equal(constructorCount,2);assert.deepEqual(loaded,['abcdefghijk']);assert.equal(media.metadata?.title,'First');assert.equal(media.metadata?.artist,'Artist One');assert.match(media.metadata!.artwork[0].src,/abcdefghijk/);assert.equal(media.playbackState,'playing');
     await act(async()=>handlers.pause());assert.equal(media.playbackState,'paused');

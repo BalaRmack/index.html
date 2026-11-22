@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark">
+<meta name="supported-color-schemes" content="dark">
+<title>Подтверждение почты в Nocturne</title>
+</head>
+<body style="margin:0;padding:0;background:#0D110E;">
+  <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent">Nocturne — подтвердите почту и войдите в библиотеку</div>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#0D110E;">
+    <tr>
+      <td align="center" style="padding:44px 16px 40px 16px;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:560px;background:#131A15;border:1px solid #24321F;border-radius:20px;">
+          <tr>
+            <td style="padding:34px 40px 0 40px;">
+              <span style="font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;font-size:23px;font-weight:800;letter-spacing:-1.1px;color:#E7F3E4;">nocturne<span style="color:#1ED760;">.</span></span>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:26px 40px 0 40px;">
+              <p style="margin:0 0 10px 0;font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;font-size:27px;line-height:1.25;letter-spacing:-0.6px;color:#F2F8F0;">Добро пожаловать в Nocturne</p>
+              <p style="margin:0;font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;font-size:15px;line-height:1.65;color:#9DB0A0;">Подтвердите адрес {{ .Email }}, чтобы библиотека, плейлисты и загруженные треки были доступны на всех устройствах.</p>
+            </td>
+          </tr>
+          <tr>
+            <td align="center" style="padding:28px 40px 0 40px;">
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;">
+                <tr>
+                  <td align="center" bgcolor="#1ED760" style="border-radius:12px;">
+                    <a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&amp;type=email"
+                       style="display:block;padding:15px 26px;font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;font-size:15px;font-weight:700;color:#07120B;text-decoration:none;border-radius:12px;">
+                      Подтвердить почту и войти
+                    </a>
+                  </td>
+                </tr>
+              </table>
+              <p style="margin:12px 0 0 0;text-align:center;font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;font-size:12px;line-height:1.6;color:#7C9180;">
+                Кнопка не открылась?
+                <a href="{{ .ConfirmationURL }}" style="color:#1ED760;text-decoration:underline;">Открыть ссылку подтверждения</a>
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:26px 40px 0 40px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#0A120C;border:1px solid #2A3F2C;border-radius:16px;">
+                <tr>
+                  <td align="center" style="padding:20px 16px 6px 16px;">
+                    <span style="font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#6F8672;">Или код подтверждения</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td align="center" style="padding:6px 10px 22px 10px;">
+                    <span style="display:block;font-family:'SFMono-Regular',ui-monospace,Menlo,Consolas,'Courier New',monospace;font-size:42px;line-height:1.15;letter-spacing:11px;color:#1ED760;-webkit-user-select:all;-moz-user-select:all;-ms-user-select:all;user-select:all;" title="Нажмите, чтобы выделить весь код">{{ .Token }}</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td align="center" style="padding:0 20px 18px 20px;">
+                    <span style="font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;font-size:12px;line-height:1.5;color:#6F8672;">Введите его на экране входа — код выделится одним кликом</span>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:28px 40px 0 40px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-top:1px solid #22301F;">
+                <tr>
+                  <td style="padding-top:18px;">
+                    <p style="margin:0;font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;font-size:13px;line-height:1.7;color:#8FA392;">Ссылка и код действуют 10 минут. Если вы не создавали аккаунт Nocturne — просто проигнорируйте это письмо, ничего не произойдёт.</p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td align="center" style="padding:26px 40px 32px 40px;">
+              <p style="margin:0;font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;font-size:12px;line-height:1.6;color:#5E7162;">
+                <a href="{{ .SiteURL }}" style="color:#1ED760;text-decoration:none;">nocturne<span style="color:#1ED760;">.</span></a>
+                <span style="color:#41513F;"> &nbsp;·&nbsp; музыка рядом</span>
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

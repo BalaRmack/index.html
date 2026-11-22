@@ -1,6 +1,6 @@
 import type { Signal } from './recommendations';
 
-export type GuestTrack = {id:string; title:string; artist:string; storage_path:string|null; video_id?:string|null; source?:'local'|'youtube'|'deezer'|'jiosaavn'; external_id?:string|null; thumbnail?:string|null; duration?:number};
+export type GuestTrack = {id:string; title:string; artist:string; storage_path:string|null; video_id?:string|null; source?:'local'|'youtube'|'deezer'|'jiosaavn'; external_id?:string|null; thumbnail?:string|null; duration?:number|null};
 const KEY='nocturne.guest.v1';
 type Store={signals:Signal[];likes:GuestTrack[]};
 const empty=():Store=>({signals:[],likes:[]});

@@ -1,4 +1,3 @@
-import type { CatalogTrack } from './catalog';
 export type Signal = {track_id:string;video_id:string|null;title:string;artist:string;event_type:'like'|'playlist_add'|'complete'|'skip'|'listen';created_at:string};
 export function taste(signals:Signal[]) {
   const skips=new Map<string,number>(); const artists=new Map<string,number>(); const seeds:string[]=[]; const recent:Signal[]=[];
@@ -12,8 +11,9 @@ export function taste(signals:Signal[]) {
   }
   return {excluded:new Set([...skips].filter(([,n])=>n>=2).map(([id])=>id)),seeds,artists:[...artists].sort((a,b)=>b[1]-a[1]).slice(0,3).map(([name])=>name),recent};
 }
-export function cleanRecommendations(tracks:CatalogTrack[],excluded:Set<string>,seen:string[]=[]) {
-  const ids=new Set(seen); return tracks.filter(t=>{if(excluded.has(t.video_id)||ids.has(t.video_id))return false;ids.add(t.video_id);return true});
+/** Принимают любые треки с id/артистом: YouTube-каталог, deezer-превью и редакционный резерв идут одной волной. */
+export function cleanRecommendations<T extends {id:string;video_id?:string|null;title:string;artist:string}>(tracks:T[],excluded:Set<string>,seen:string[]=[]) {
+  const ids=new Set(seen); return tracks.filter(t=>{const key=t.video_id||t.id;if(excluded.has(key)||ids.has(key))return false;ids.add(key);return true});
 }
 
 /** Signals such as likes are preferences, not evidence that a track was played. */
@@ -28,9 +28,9 @@ export function recentlyPlayed(signals:Signal[],now=Date.now()) {
 export const artistKey=(s:string)=>s.toLocaleLowerCase().normalize('NFKC').replace(/\s*[-–—]\s*topic$/i,'').replace(/[^\p{L}\p{N}]+/gu,' ').trim();
 export const recordingKey=(artist:string,title:string)=>`${artistKey(artist)}|${artistKey(title)}`;
 /** Keep source order where possible; never place the same artist consecutively. */
-export function diverseRecommendations(tracks:CatalogTrack[],blocked:Set<string>,seen:string[],recentRecordings:Set<string>,previousArtist='',limit=20) {
+export function diverseRecommendations<T extends {id:string;video_id?:string|null;title:string;artist:string}>(tracks:T[],blocked:Set<string>,seen:string[],recentRecordings:Set<string>,previousArtist='',limit=20) {
   const pool=cleanRecommendations(tracks,blocked,seen).filter(t=>!recentRecordings.has(recordingKey(t.artist,t.title)));
-  const out:CatalogTrack[]=[];let last=artistKey(previousArtist);
+  const out:T[]=[];let last=artistKey(previousArtist);
   while(pool.length && out.length<limit) {
     const index=pool.findIndex(t=>artistKey(t.artist)!==last);
     if(index<0)break;

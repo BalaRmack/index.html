@@ -1,6 +1,8 @@
 # Nocturne
 
-A music player built with Next.js App Router, TypeScript, Tailwind CSS, Supabase and Web Audio. The included demo is “Outfoxing the Fox” by Kevin MacLeod (Creative Commons), sourced from [MDN webaudio-examples](https://github.com/mdn/webaudio-examples). Upload only audio you have permission to use.
+A music player built with Next.js App Router, TypeScript, Tailwind CSS, Supabase and Web Audio.
+
+The library ships no demo rows: an empty account shows an empty library, and every table row is a real track with its real album, duration and add date. `public/audio/outfoxing.mp3` (“Outfoxing the Fox” by Kevin MacLeod, Creative Commons, sourced from [MDN webaudio-examples](https://github.com/mdn/webaudio-examples)) is kept only as a legacy local sample for existing rows and is never presented as catalogue content. Upload only audio you have permission to use.
 
 ## Local development
 
@@ -9,9 +11,17 @@ A music player built with Next.js App Router, TypeScript, Tailwind CSS, Supabase
 3. Apply all migrations in `supabase/migrations` in order to a new Supabase project. Configure the Auth site URL and redirect allowlist for your deployed domain and local URL.
 4. `npm run dev`.
 
-Email magic links require an Auth email provider configured for your use case; the default Supabase SMTP has restrictions. Audio is private per user, with short-lived signed URLs and row-level security. Demo playback works without an account. Uploads are limited to 50 MB. No claim of zero network latency is made: playback streams and actual start time depends on the browser and connection.
+Sign-in uses a six-digit email code (Supabase OTP), not a magic link: `app/auth/confirm` validates it and `app/auth/complete` finishes the session. Supabase Auth must be configured for it — `mailer_otp_length = 6`, OTP expiry, email templates and the redirect allowlist are documented in [`supabase/email-templates/README.md`](supabase/email-templates/README.md). The default Supabase SMTP has sending restrictions, so configure an email provider for your use case. Without `mailer_otp_length = 6` the code in the email is 8 digits and the six-cell input will not accept it. Audio is private per user, with short-lived signed URLs and row-level security. Demo playback works without an account. Uploads are limited to 50 MB. No claim of zero network latency is made: playback streams and actual start time depends on the browser and connection.
 
 The UI and audio engine run entirely in the browser, with no native API dependency. A future Tauri shell can host a static client after configuring Next static export; Supabase and Auth redirect/deep-link policies must be configured for the desktop origin. No Rust shell is included yet.
+
+## Interface
+
+The interface is fully bilingual (Russian default, English in Settings ⇄ Onboarding); the language is stored in `localStorage` and mirrored to `public.profiles.preferences`. Onboarding is a five-step constructor (taste, accent, layout, player, playback) that can be skipped at any step, applies live through the preview, and writes the same preferences the Settings panel edits — the two never diverge, and «Пройти заново» restarts the wizard.
+
+The hero carries a live waveform (Web Audio analyser for local files, an idle wave otherwise) plus a mood selector. Playback opens the “Now playing” side panel, which shifts the content column instead of covering it, with artist info, suggestions and actions; the queue panel reorders and removes rows; the fullscreen player shows LRCLIB lyrics (via `/api/lyrics`) synced to playback and the waveform. Player hotkeys are matched by `lib/hotkeys.ts` and listed in Settings → Profile; a sleep timer fades the last seconds out (`lib/fade.ts`), and «До конца трека» stops playback at the end of the current track. Playlists can be renamed, given a custom cover and deleted. Everything honours `prefers-reduced-motion`, and PWA install is supported via `app/manifest.ts`.
+
+Recommendations never hang: shelves load behind a hard 4-second client deadline, are topped up from fresh mixes so a shelf is never an empty shelf, and anything that came from a fallback is labelled as a fallback rather than as a personal pick. Blocking a track (“Не рекомендовать”) applies on the client immediately — the card disappears before the server list finishes loading — is undoable from the notice, and is managed in Settings → Blacklist.
 
 ## Catalogue and recommendations
 

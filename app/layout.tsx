@@ -1,8 +1,47 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import './globals.css';
-export const metadata: Metadata = { title: 'Nocturne — музыка для ваших моментов', description: 'Музыка для каждого момента.' };
+
+export const metadata: Metadata = {
+  title: 'Nocturne — музыка для ваших моментов',
+  description: 'Музыка для каждого момента.',
+  applicationName: 'Nocturne',
+  manifest: '/manifest.webmanifest',
+  icons: { icon: [{ url: '/icon.svg', type: 'image/svg+xml' }], apple: '/icons/icon-180.png' },
+  appleWebApp: { capable: true, title: 'Nocturne', statusBarStyle: 'black-translucent', startupImage: '/icons/icon-512.png' },
+  formatDetection: { telephone: false },
+};
+
+export const viewport: Viewport = {
+  themeColor: '#0d100f',
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
+  colorScheme: 'dark',
+};
+
+/**
+ * Тема применяется до первой отрисовки: иначе между серверным HTML и React
+ * видна вспышка дефолтного акцента. Скрипт читает тот же ключ localStorage,
+ * что и lib/preferences.ts, и ставит переменные + data-атрибуты на <html>.
+ */
+const BOOTSTRAP = `(function(){try{
+var raw=localStorage.getItem('nocturne.preferences.v1');if(!raw)return;
+var p=JSON.parse(raw);var root=document.documentElement;
+var accents={nocturne:['#b7e49a','#8fcf7f','#1b2a1c'],violet:['#c9b6ff','#a68cff','#221a33'],amber:['#f7d199','#f0b46a','#2b2115'],ice:['#a9d8ff','#7fc0ff','#152229']};
+var a=accents[p.accent]||accents.nocturne;
+root.style.setProperty('--green',a[0]);root.style.setProperty('--green-strong',a[1]);root.style.setProperty('--green-deep',a[2]);
+root.dataset.accent=p.accent||'nocturne';
+if(p.glass)root.dataset.glass=p.glass;
+if(p.particles)root.dataset.particles=p.particles;
+if(p.sidebar)root.dataset.sidebar=p.sidebar;
+if(p.playerStyle)root.dataset.player=p.playerStyle;
+if(p.nowPlaying)root.dataset.nowplaying=p.nowPlaying;
+if(p.language)root.lang=p.language;
+}catch(e){}})();`;
+
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="ru"><body>
+  return <html lang="ru" data-accent="nocturne" data-glass="full" data-player="attached" suppressHydrationWarning><body>
+    <script dangerouslySetInnerHTML={{ __html: BOOTSTRAP }} />
     <svg aria-hidden="true" focusable="false" width="0" height="0" style={{position:'absolute',overflow:'hidden'}}>
       <defs>
         <filter id="liquid-glass-refraction" x="0" y="0" width="100%" height="100%" colorInterpolationFilters="sRGB">
