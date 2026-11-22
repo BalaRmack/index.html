@@ -712,3 +712,8 @@ html[data-accent="mono"] .fp-tabs button.on .fp-tab-label,html[data-accent="mono
 .youtube-mini-pip .youtube-frame,.youtube-mini-pip iframe{width:100%!important;height:100%!important;border:0!important;display:block!important}
 .youtube-mini-close{position:absolute!important;top:6px!important;right:6px!important;z-index:5!important;width:24px!important;height:24px!important;border-radius:999px!important;border:1px solid rgba(255,255,255,.25)!important;background:rgba(12,16,14,.78)!important;color:#fff!important;font-size:12px!important;display:grid!important;place-items:center!important;cursor:pointer!important}
 @keyframes pipPop{from{opacity:0;transform:translateY(12px) scale(.92)}to{opacity:1;transform:translateY(0) scale(1)}}
+
+/* Prevent long artist names without spaces from blowing out FullscreenPlayer grid */
+.fp-grid{grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important}
+.fp-left,.fp-right,.fp-meta{min-width:0!important;max-width:100%!important}
+.fp-artist{display:block!important;max-width:min(100%,460px)!important;margin-inline:auto!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important}
