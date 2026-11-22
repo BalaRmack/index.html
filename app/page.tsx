@@ -790,7 +790,7 @@ export default function HomePage() {
   const sleepActive = sleep.kind !== 'off';
 
   return <MotionConfig reducedMotion="user" transition={spring}>
-    <div className={`app-shell${panel ? ' has-panel' : ''}${prefs.nowPlaying === 'left' ? ' panel-left' : ''}`} data-player-style={prefs.playerStyle} data-sidebar={prefs.sidebar}>
+    <div className={`app-shell${panel ? ' has-panel' : ''}${panel === 'now' && prefs.nowPlaying === 'left' ? ' panel-left' : ''}`} data-player-style={prefs.playerStyle} data-sidebar={prefs.sidebar}>
       <aside className="sidebar">
         <button className="brand" onClick={() => { setView('home'); setSearch(''); setArtist(null); }}><span className="brand-icon"><AudioLines size={20} /></span><span>nocturne<span className="brand-dot">.</span></span></button>
         <div className="side-label">{t('navigation')}</div>
@@ -908,7 +908,7 @@ export default function HomePage() {
               <div className="player-art" style={{ backgroundImage: current ? `url('${imageFor(current)}')` : undefined }} />
               <div className="now-text">
                 <b>{current?.title || t('queueEmpty')}</b>
-                {current ? <button className="now-artist" onClick={() => openArtist(current.artist)}>{artistLabel(current.artist)}</button> : <small>{t('queueEmpty')}</small>}
+                {current ? <button className="now-artist" onClick={() => openArtist(current.artist)}>{artistLabel(current.artist)}</button> : <small>{t('subtitle')}</small>}
               </div>
             </motion.div>
           </Presence>

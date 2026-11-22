@@ -192,7 +192,8 @@ html[data-sidebar="compact"] .brand{margin-bottom:28px;justify-content:center}
 .app-shell.has-panel .main{padding-right:var(--panel-width)}
 .app-shell.has-panel.panel-left .main{padding-right:0;padding-left:var(--panel-width)}
 .now-playing-panel{position:fixed;z-index:14;top:0;right:0;bottom:0;width:var(--panel-width);display:flex;flex-direction:column;gap:14px;padding:18px 16px 22px;background-color:rgba(20,28,23,.86);border-left:1px solid rgba(219,255,227,.2);overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin}
-.now-playing-panel.is-left{right:auto;left:0;border-left:0;border-right:1px solid rgba(219,255,227,.2)}
+.now-playing-panel.is-left{right:auto;left:228px;border-left:0;border-right:1px solid rgba(219,255,227,.2)}
+.app-shell[data-sidebar="compact"] .now-playing-panel.is-left{left:76px}
 .panel-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
 .panel-kicker{display:block;font-size:9px;letter-spacing:1.6px;text-transform:uppercase;color:#8ea093;font-weight:700}
 .panel-head h2{margin:6px 0 0;font-family:Georgia,serif;font-size:21px;letter-spacing:-.4px;font-weight:400}
