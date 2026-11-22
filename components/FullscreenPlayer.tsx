@@ -3,12 +3,12 @@ import { LayoutGroup } from 'framer-motion';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ListMusic, X } from 'lucide-react';
+import { ListMusic, Pause, Play, SkipBack, SkipForward, X } from 'lucide-react';
 import type { LyricLine, PlayerBindings, Track } from '@/lib/types';
 import { activeLyricLine, lyricsCacheKey } from '@/lib/lyrics';
 import { extractPalette, type Palette } from '@/lib/palette';
 import { formatDuration } from '@/lib/format';
-import { BlockButton, LikeButton } from './MotionButtons';
+import { BlockButton, ImpulseButton, LikeButton } from './MotionButtons';
 import WaveVisualizer from './WaveVisualizer';
 
 const spring = { type: 'spring' as const, stiffness: 340, damping: 30 };
@@ -182,6 +182,31 @@ export default function FullscreenPlayer({ player, onClose, mood, onMood, origin
               style={{ ['--progress' as string]: `${progress}%` } as React.CSSProperties}
             />
             <span>{formatDuration(player.duration)}</span>
+          </motion.div>
+          <motion.div
+            className="fp-transport"
+            initial={player.reduced ? false : { opacity: 0, y: 14 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, transition: { duration: 0.1 } }}
+            transition={{ duration: 0.36, delay: 0.32, ease: [0.22, 1, 0.36, 1] }}
+          >
+            <ImpulseButton variant="left" className="fp-skip-btn" label={t('previous')} reduced={player.reduced} disabled={!current} onClick={() => player.onSkip(-1)}>
+              <SkipBack size={22} />
+            </ImpulseButton>
+            <motion.button
+              type="button"
+              className="fp-play-btn"
+              aria-label={player.playing ? t('pause') : t('play')}
+              title={player.playing ? t('pause') : t('play')}
+              disabled={!current}
+              whileTap={player.reduced ? undefined : { scale: 0.92 }}
+              onClick={player.onTogglePlay}
+            >
+              {player.playing ? <Pause size={24} fill="currentColor" /> : <Play size={24} fill="currentColor" style={{ marginLeft: 2 }} />}
+            </motion.button>
+            <ImpulseButton variant="right" className="fp-skip-btn" label={t('next')} reduced={player.reduced} disabled={!current} onClick={() => player.onSkip(1)}>
+              <SkipForward size={22} />
+            </ImpulseButton>
           </motion.div>
           <motion.div className="fp-controls" initial={player.reduced ? false : { opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, transition: { duration: 0.1 } }} transition={{ duration: 0.36, delay: 0.34, ease: [0.22, 1, 0.36, 1] }}>
             {current && (

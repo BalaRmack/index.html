@@ -717,3 +717,10 @@ html[data-accent="mono"] .fp-tabs button.on .fp-tab-label,html[data-accent="mono
 .fp-grid{grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important}
 .fp-left,.fp-right,.fp-meta{min-width:0!important;max-width:100%!important}
 .fp-artist{display:block!important;max-width:min(100%,460px)!important;margin-inline:auto!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important}
+
+/* FullscreenPlayer transport buttons (Previous / Play-Pause / Next) */
+.fp-transport{display:flex!important;align-items:center!important;justify-content:center!important;gap:22px!important;margin:6px 0 4px!important}
+.fp-skip-btn{width:44px!important;height:44px!important;border-radius:999px!important;border:1px solid rgba(255,255,255,.14)!important;background:rgba(255,255,255,.07)!important;color:#fff!important;display:grid!important;place-items:center!important;cursor:pointer!important;transition:background .16s ease,border-color .16s ease}
+.fp-skip-btn:hover:not(:disabled){background:rgba(255,255,255,.15)!important;border-color:rgba(255,255,255,.28)!important}
+.fp-play-btn{width:58px!important;height:58px!important;border-radius:999px!important;border:none!important;background:var(--fp-base,var(--accent,#b7e49a))!important;color:#0b110d!important;display:grid!important;place-items:center!important;cursor:pointer!important;box-shadow:0 10px 28px rgba(0,0,0,.38),inset 0 1px 0 rgba(255,255,255,.55)!important;transition:filter .16s ease}
+.fp-play-btn:hover:not(:disabled){filter:brightness(1.06)!important}
