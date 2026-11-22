@@ -13,6 +13,7 @@ import { formatAddedDate, formatDuration, formatRemaining } from '@/lib/format';
 import { ACCENTS, DEFAULT_PREFERENCES, applyPreferences, preferencesToProfile, readPreferences, sanitizePreferences, writePreferences, type Preferences } from '@/lib/preferences';
 import { makeTranslate, type Translate, type TranslationKey } from '@/lib/i18n';
 import { appendQueue, moveInQueue, resolveNextIndex } from '@/lib/queue';
+import { createEmbedFallback, embedSubstituteFor, failEmbedSubstitute, readEmbedCache, rememberEmbedSubstitute, type EmbedCache, type EmbedFallback } from '@/lib/embed-fallback';
 import { sanitizeSleepTimer, sleepEndOfTrack, sleepExpired, sleepMinutes, sleepMultiplier, secondsLeft, type SleepTimer } from '@/lib/sleep-timer';
 import { fadeInGain, fadeOutGain, resolveVolume } from '@/lib/fade';
 import { createPlaylist as addGuestPlaylist, readGuestPlaylists, removePlaylist as dropGuestPlaylist, renamePlaylist as renameGuestPlaylist, setPlaylistCover, toggleTrackInPlaylist, tracksInPlaylist, writeGuestPlaylists } from '@/lib/guest-playlists';
@@ -103,6 +104,30 @@ export default function HomePage() {
   const audio = useRef<HTMLAudioElement | null>(null);
   const yt = useRef<YouTubePlayerHandle | null>(null);
   const [youtubeActive, setYoutubeActive] = useState(false);
+  /**
+   * Обход запрета на встраивание. У официального клипа правообладатель часто закрывает embed,
+   * и YouTube отдаёт 101/150 (или 100). Тогда не показываем ошибку и не останавливаем очередь,
+   * а молча пробуем разрешённую версию того же трека — до MAX_EMBED_ATTEMPTS штук. Тот, который
+   * реально заиграл, запоминается в localStorage, так что повторный старт идёт без проб.
+   */
+  const embedCache = useRef<EmbedCache | null>(null);
+  if (embedCache.current === null) embedCache.current = readEmbedCache(typeof window === 'undefined' ? null : window.localStorage);
+  const embedStore = () => (typeof window === 'undefined' ? null : window.localStorage);
+  /** Колбэк машины живёт в ref: на каждый рендер он должен видеть свежие skip/say, а не первый. */
+  const embedGiveUp = useRef<{ onExhausted: () => void }>({ onExhausted: () => { } });
+  const embed: EmbedFallback = useMemo(() => createEmbedFallback({
+    search: async (query) => {
+      // Потолок на один запрос: зависшее зеркало не должно удерживать загрузку дольше общего бюджета проб.
+      const response = await fetch(`/api/catalog/search?q=${encodeURIComponent(query)}`, { cache: 'no-store', signal: AbortSignal.timeout(5000) });
+      if (!response.ok) throw new Error('catalog unavailable');
+      return response.json();
+    },
+    load: (videoId) => { yt.current?.load(videoId); },
+    resolve: (videoId) => embedSubstituteFor(embedCache.current || {}, videoId),
+    remember: (blocked, candidate) => { embedCache.current = rememberEmbedSubstitute(embedCache.current || {}, blocked, candidate, embedStore()); },
+    invalidate: (blocked) => { embedCache.current = failEmbedSubstitute(embedCache.current || {}, blocked, embedStore()); },
+    onExhausted: () => embedGiveUp.current.onExhausted(),
+  }), []);
   const ctx = useRef<AudioContext | null>(null);
   const gain = useRef<GainNode | null>(null);
   const analyser = useRef<AnalyserNode | null>(null);
@@ -324,7 +349,7 @@ export default function HomePage() {
     }
     void load(); return () => { disposed = true; clearTimeout(timer); controller.abort(); };
   }, [user, refreshShelves, prefs.artists.join('|'), prefs.genres.join('|'), t]);
-  useEffect(() => { yt.current?.cue(!shuffle ? queue.current[queueIndex.current + 1]?.video_id || null : null); }, [shuffle, youtubeActive]);
+  useEffect(() => { yt.current?.cue(!shuffle ? embed.playbackId(queue.current[queueIndex.current + 1]?.video_id) || null : null); }, [shuffle, youtubeActive, embed]);
   useEffect(() => { applyLevel(); }, [volume, muted, applyLevel]);
   useEffect(() => { applyLevel(); }, [prefs.normalizeVolume, applyLevel]);
   // Кроссфейд: трек плавно вступает, а перед концом так же плавно уходит в тишину.
@@ -416,7 +441,7 @@ export default function HomePage() {
         if (audio.current!.paused) { if (ctx.current && !track.video_id) await ctx.current.resume(); await audio.current!.play(); playback.current.started = true; setPlaying(true); } else { audio.current!.pause(); setPlaying(false); } return;
       }
       if (playback.current.started && currentRef.current?.id !== track.id) recordSwitch();
-      seq = ++requestSeq.current; if (!track.video_id) yt.current?.stop(); audio.current?.pause(); setSoundcloudUrl(null);
+      seq = ++requestSeq.current; if (!track.video_id) { embed.cancel(); yt.current?.stop(); } audio.current?.pause(); setSoundcloudUrl(null);
       if (list && list.length) { waveMode.current = false; setQueue(list, Math.max(0, list.findIndex((x) => x.id === track.id))); }
       if (track.video_id && !playedIds.current.includes(track.video_id)) playedIds.current.push(track.video_id);
       playback.current = { seconds: 0, last: 0, completed: false, started: false }; listenRecorded.current = false;
@@ -424,7 +449,13 @@ export default function HomePage() {
       sleepStopRef.current = sleep.kind === 'track';
       setCurrent(track); currentRef.current = track; setElapsed(0); setDuration(0); setPlaying(false); setLoading(true);
       fadeRef.current = 1; applyLevel();
-      if (track.video_id) { setYoutubeActive(true); yt.current?.load(track.video_id); yt.current?.cue(!shuffle ? queue.current[queueIndex.current + 1]?.video_id || null : null); return; }
+      if (track.video_id) {
+        // begin() возвращает id, которым надо играть: оригинал или уже проверенную замену из кэша.
+        setYoutubeActive(true);
+        yt.current?.load(embed.begin(track) || track.video_id);
+        yt.current?.cue(!shuffle ? embed.playbackId(queue.current[queueIndex.current + 1]?.video_id) || null : null);
+        return;
+      }
       setYoutubeActive(false);
       const remote = Boolean(track.external_id); const player = initAudio(remote); player.pause(); player.removeAttribute('src'); player.load();
       {
@@ -497,6 +528,8 @@ export default function HomePage() {
     if (direction > 0 && prefsRef.current.autoplayWave && currentRef.current) { void startWave(); return; }
     setPlaying(false); say('noticeQueueEnd');
   }
+  // Все варианты тоже закрыты: одна короткая строка вместо ошибки и уходим на следующий трек.
+  embedGiveUp.current.onExhausted = () => { say('noticeEmbedFallback'); void skip(1, true); };
   const mediaActions = useRef({ play: () => { }, pause: () => { }, nexttrack: () => { }, previoustrack: () => { } });
   mediaActions.current = {
     play: () => { if (soundcloudUrl) return; const track = currentRef.current; if (!track) return; if (track.video_id && youtubeActive) yt.current?.play(); else if (!playing) void playTrack(track); },
@@ -681,7 +714,7 @@ export default function HomePage() {
       const u = new URL(input);
       if (u.protocol !== 'https:' || !['soundcloud.com', 'www.soundcloud.com'].includes(u.hostname) || u.username || u.password || u.pathname.split('/').filter(Boolean).length < 2) throw new Error();
       if (playback.current.started) recordSwitch();
-      ++requestSeq.current; yt.current?.stop(); audio.current?.pause(); setYoutubeActive(false); setPlaying(false); setLoading(false); setSoundcloudUrl(`https://soundcloud.com${u.pathname}`);
+      ++requestSeq.current; embed.cancel(); yt.current?.stop(); audio.current?.pause(); setYoutubeActive(false); setPlaying(false); setLoading(false); setSoundcloudUrl(`https://soundcloud.com${u.pathname}`);
     } catch { setNotice('https://soundcloud.com/artist/track'); }
   }
   function setPref<K extends keyof Preferences>(key: K, value: Preferences[K]) { setPrefs((prev) => ({ ...prev, [key]: value })); }
@@ -725,7 +758,7 @@ export default function HomePage() {
       const playing0 = queue.current[queueIndex.current];
       const next = moveInQueue(queue.current, from, to);
       setQueue(next, Math.max(0, next.indexOf(playing0 as Track)));
-      if (playing0?.video_id) yt.current?.cue(!shuffle ? next[next.indexOf(playing0 as Track) + 1]?.video_id || null : null);
+      if (playing0?.video_id) yt.current?.cue(!shuffle ? embed.playbackId(next[next.indexOf(playing0 as Track) + 1]?.video_id) || null : null);
     },
     onQueueRemove: (index) => {
       const list = [...queue.current];
@@ -787,7 +820,7 @@ export default function HomePage() {
             </button>
           </div>
         </header>
-        <YouTubePlayer ref={yt} volume={muted ? 0 : Math.round(volume * resolveVolume({ volume, normalize: prefs.normalizeVolume, remote: true, fade: sleepRef.current * fadeRef.current }))} onProgress={(time, d) => { setElapsed(time); setDuration(d); if (advanceListening(playback.current, time, d, true, false) && currentRef.current) void logSignal(currentRef.current, 'complete', playback.current.seconds); recordListen(); if (prefs.crossfade > 0 && d > 0) { const remaining = d - time; fadeRef.current = remaining > 0 && remaining <= prefs.crossfade ? fadeOutGain(remaining, prefs.crossfade) : 1; applyLevel(); } }} onState={(state) => { if (state === 'playing') { playback.current.started = true; setPlaying(true); setLoading(false); } else if (state === 'paused') { setPlaying(false); setLoading(false); } else { setPlaying(false); if (sleepStopRef.current) { sleepStopRef.current = false; setSleep(sleepOff()); say('sleepFading'); return; } if (repeat) { playback.current = { seconds: 0, last: 0, completed: false, started: true }; listenRecorded.current = false; yt.current?.seek(0); yt.current?.play(); } else void skip(1, true); } }} onError={(message) => { setLoading(false); setPlaying(false); setNotice(message); }} />
+        <YouTubePlayer ref={yt} volume={muted ? 0 : Math.round(volume * resolveVolume({ volume, normalize: prefs.normalizeVolume, remote: true, fade: sleepRef.current * fadeRef.current }))} onProgress={(time, d) => { setElapsed(time); setDuration(d); if (advanceListening(playback.current, time, d, true, false) && currentRef.current) void logSignal(currentRef.current, 'complete', playback.current.seconds); recordListen(); if (prefs.crossfade > 0 && d > 0) { const remaining = d - time; fadeRef.current = remaining > 0 && remaining <= prefs.crossfade ? fadeOutGain(remaining, prefs.crossfade) : 1; applyLevel(); } }} onState={(state) => { if (state === 'playing') { embed.playing(); playback.current.started = true; setPlaying(true); setLoading(false); } else if (state === 'paused') { setPlaying(false); setLoading(false); } else { setPlaying(false); if (sleepStopRef.current) { sleepStopRef.current = false; setSleep(sleepOff()); say('sleepFading'); return; } if (repeat) { playback.current = { seconds: 0, last: 0, completed: false, started: true }; listenRecorded.current = false; yt.current?.seek(0); yt.current?.play(); } else void skip(1, true); } }} onError={(message, code) => { /* 101/150/100 забирает обход: пока он идёт, крутится загрузка, а не ошибка. */ if (embed.error(code)) { setLoading(true); return; } setLoading(false); setPlaying(false); setNotice(message); }} />
         <Presence reduced={reducedMotion} mode="wait" initial={false}>
           <motion.div className="content" key={navView === 'search' ? 'search' : view} initial={reducedMotion ? { opacity: 0 } : { opacity: 0, y: 12, filter: 'blur(6px)' }} animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }} exit={reducedMotion ? { opacity: 0 } : { opacity: 0, y: -6, filter: 'blur(4px)' }} transition={spring}>
             {artist && view === 'artist' ? <>

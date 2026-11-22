@@ -159,20 +159,30 @@ test('вставка из буфера: код из письма расклад�
 });
 
 test('стрелки и Backspace двигают фокус по ячейкам', async () => {
-  const handle = mount(React.createElement(OtpCodeInput, { length: 6, value: '48', onChange: () => {} }));
+  // autoFocus выключен: его requestAnimationFrame срабатывает в свой момент и перебивает
+  // фокус посреди проверок. Клавиши же двигают фокус синхронно — это и проверяем.
+  const edits: string[] = [];
+  const handle = mount(React.createElement(OtpCodeInput, { length: 6, value: '48', onChange: (next: string) => { edits.push(next); }, autoFocus: false }));
+  const doc = handle.doc;
   const inputs = cellsOf(handle);
-  const pressed: number[] = [];
-  handle.doc.addEventListener('focusin', (event) => { pressed.push(inputs.indexOf(event.target as HTMLInputElement) + 1); });
   const key = async (input: HTMLInputElement, keyName: string) => {
-    await act(async () => { input.dispatchEvent(new handle.dom.window.KeyboardEvent('keydown', { key: keyName, bubbles: true, cancelable: true })); });
+    await act(async () => {
+      input.focus();
+      input.dispatchEvent(new handle.dom.window.KeyboardEvent('keydown', { key: keyName, bubbles: true, cancelable: true }));
+    });
   };
   await key(inputs[1], 'ArrowRight');
-  assert.equal(pressed.at(-1), 3, 'стрелка вправо переводит фокус на следующую ячейку');
+  assert.equal(doc.activeElement, inputs[2], 'стрелка вправо переводит фокус на следующую ячейку');
   await key(inputs[2], 'ArrowLeft');
-  assert.equal(pressed.at(-1), 2, 'стрелка влево возвращается в предыдущую');
+  assert.equal(doc.activeElement, inputs[1], 'стрелка влево возвращается в предыдущую');
   // Пустая ячейка: Backspace уводит фокус влево и не трогает заполненные соседи.
   await key(inputs[2], 'Backspace');
   assert.equal(inputs[0].value, '4', 'в незаполненной ячейке Backspace не стирает чужую цифру');
-  assert.equal(pressed.at(-1), 2, 'фокус уехал на ячейку слева');
+  assert.equal(doc.activeElement, inputs[1], 'фокус уехал на ячейку слева');
+  // Заполненная ячейка: Backspace стирает именно её цифру, фокус остаётся на месте.
+  // Значение контролируемое, поэтому результат смотрим в onChange, а не в DOM.
+  await key(inputs[1], 'Backspace');
+  assert.deepEqual(edits, ['4'], 'стёрлась цифра из ячейки 2, а не соседняя');
+  assert.equal(doc.activeElement, inputs[1], 'стирание не уводит фокус, если ячейка была заполнена');
   handle.unmount();
 });

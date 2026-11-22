@@ -1,11 +1,12 @@
 'use client';
 
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
+import { embedErrorMessage } from '@/lib/embed-fallback';
 
 declare global { interface Window { onYouTubeIframeAPIReady?:()=>void } }
 
 type Handle = { load:(videoId:string)=>void; cue:(videoId:string|null)=>void; stop:()=>void; play:()=>void; pause:()=>void; seek:(seconds:number)=>void; volume:(value:number)=>void };
-type Props = { volume:number; onState:(state:'playing'|'paused'|'ended')=>void; onProgress:(time:number,duration:number)=>void; onError:(message:string)=>void };
+type Props = { volume:number; onState:(state:'playing'|'paused'|'ended')=>void; onProgress:(time:number,duration:number)=>void; onError:(message:string,code:number)=>void };
 let apiPromise:Promise<typeof YT>|undefined;
 function youtubeApi() {
   if(window.YT?.Player) return Promise.resolve(window.YT);
@@ -49,7 +50,7 @@ const YouTubePlayer=forwardRef<Handle,Props>(function YouTubePlayer({volume,onSt
       } else {
         const current=slots.current[active.current];
         if(current.player)current.player.loadVideoById(id);
-        else if(initError.current)callbacks.current.onError(`${initError.current} Обновите страницу.`);
+        else if(initError.current)callbacks.current.onError(`${initError.current} Обновите страницу.`,0);
       }
     },
     cue:cueNext,
@@ -75,12 +76,15 @@ const YouTubePlayer=forwardRef<Handle,Props>(function YouTubePlayer({volume,onSt
             if(!selected.current || (id && id!==selected.current))return;
             if(e.data===YTApi.PlayerState.PLAYING)callbacks.current.onState('playing');else if(e.data===YTApi.PlayerState.PAUSED)callbacks.current.onState('paused');else if(e.data===YTApi.PlayerState.ENDED)callbacks.current.onState('ended');
           },
-          onError:e=>{if(disposed)return;if(index!==active.current){slots.current[index].cued=null;slots.current[index].readyToPlay=false;return;}if(selected.current)callbacks.current.onError(e.data===101||e.data===150?'Автор запретил встроенное воспроизведение. Выберите другой трек.':`YouTube не смог воспроизвести видео (ошибка ${e.data}).`);},
-          onAutoplayBlocked:()=>{if(!disposed && index===active.current && selected.current)callbacks.current.onError('Браузер заблокировал автозапуск. Попробуйте нажать «Воспроизвести» в нижней панели или выбрать другой трек.');},
+          onError:e=>{if(disposed)return;const code=Number(e.data)||0;if(index!==active.current){slots.current[index].cued=null;slots.current[index].readyToPlay=false;return;}
+            // Ошибку того же ролика, что уже не выбран (например, опоздавшую после обхода), не показываем.
+            const failed=e.target.getVideoData?.()?.video_id;if(!selected.current || (failed && failed!==selected.current))return;
+            callbacks.current.onError(embedErrorMessage(code),code);},
+          onAutoplayBlocked:()=>{if(!disposed && index===active.current && selected.current)callbacks.current.onError('Браузер заблокировал автозапуск. Попробуйте нажать «Воспроизвести» в нижней панели или выбрать другой трек.',0);},
         }});instances.push(instance);
       });
       interval=window.setInterval(()=>{const player=slots.current[active.current].player;if(!disposed && selected.current && player?.getPlayerState?.()===YTApi.PlayerState.PLAYING)callbacks.current.onProgress(player.getCurrentTime(),player.getDuration());},250);
-    }).catch(error=>{if(!disposed){initError.current=error.message;if(selected.current)callbacks.current.onError(error.message);}});
+    }).catch(error=>{if(!disposed){initError.current=error.message;if(selected.current)callbacks.current.onError(error.message,0);}});
     return()=>{disposed=true;if(interval)window.clearInterval(interval);instances.forEach(player=>player.destroy());slots.current.forEach(slot=>{slot.player=null;slot.cued=null;slot.readyToPlay=false;});};
   },[]);
   return <div className="youtube-background" aria-hidden="true">{[0,1].map(index=><div key={index} ref={node=>{containers.current[index]=node}} className="youtube-frame" />)}</div>;
