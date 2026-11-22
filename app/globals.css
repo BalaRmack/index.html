@@ -569,3 +569,10 @@ html[data-accent="mono"] .card,html[data-accent="mono"] .chip,html[data-accent="
 .segmented-bg,.settings-tab-bg{position:absolute;inset:0;border-radius:inherit;background:var(--green,#b7e49a)!important;box-shadow:0 2px 10px var(--green-glow,rgba(183,228,154,.22));z-index:0;pointer-events:none}
 html[data-accent="mono"] .segmented-bg,html[data-accent="mono"] .settings-tab-bg{background:#f2f2f2!important}
 html[data-accent="mono"] .segmented button.on,html[data-accent="mono"] .segmented button.on span:not(.segmented-bg),html[data-accent="mono"] .settings-tabs button.on,html[data-accent="mono"] .settings-tabs button.on span:not(.settings-tab-bg){color:#0a0a0a!important}
+
+/* Guaranteed visible sliding pill for tabs and segmented controls */
+.segmented button,.settings-tabs button{position:relative!important;overflow:visible!important;background:transparent!important;box-shadow:none!important}
+.segmented-bg{display:block!important;position:absolute!important;inset:0!important;z-index:1!important;border-radius:999px!important;background:var(--green,#b7e49a)!important;box-shadow:0 2px 10px var(--green-glow,rgba(183,228,154,.24))!important;pointer-events:none!important}
+html[data-accent="mono"] .segmented-bg{background:#f2f2f2!important}
+.segmented button.on,.segmented button.on span,.settings-tabs button.on,.settings-tabs button.on span{color:var(--green-ink,#111a13)!important;font-weight:700!important}
+html[data-accent="mono"] .segmented button.on,html[data-accent="mono"] .segmented button.on span,html[data-accent="mono"] .settings-tabs button.on,html[data-accent="mono"] .settings-tabs button.on span{color:#0a0a0a!important}
