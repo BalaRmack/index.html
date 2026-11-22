@@ -151,9 +151,9 @@ export default function FullscreenPlayer({ player, onClose, mood, onMood }: {
             <span>{formatDuration(player.duration)}</span>
           </div>
           <div className="fp-controls">
-            <button className="ghost" aria-label={t('previousTrack')} onClick={player.onPrevious}><SkipBack size={18} /></button>
+            <button className="ghost" aria-label={t('previousTrack')} onClick={() => player.onSkip(-1)}><SkipBack size={18} /></button>
             <button className="primary" aria-label={player.playing ? t('pauseTrack') : t('playTrack')} onClick={player.onTogglePlay}>{player.playing ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" />}</button>
-            <button className="ghost" aria-label={t('nextTrack')} onClick={player.onNext}><SkipForward size={18} /></button>
+            <button className="ghost" aria-label={t('nextTrack')} onClick={() => player.onSkip(1)}><SkipForward size={18} /></button>
             {current && (
               <>
                 <LikeButton active={player.likes.includes(current.id)} label={player.likes.includes(current.id) ? t('unlike') : t('like')} reduced={player.reduced} size={20} onToggle={() => player.onToggleLike(current)} />

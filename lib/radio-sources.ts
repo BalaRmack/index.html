@@ -41,7 +41,7 @@ export async function deezerRadio(artist:string) {
   const search=await readJson(`https://api.deezer.com/search/artist?q=${encodeURIComponent(query)}&limit=8`);
   const artists=Array.isArray(search.data)?search.data:[];
   const rows=artists.map(obj).filter((a:Record<string,any>)=>/^\d+$/.test(String(a.id||'')));
-  const target=rows.find((a)=>key(String(a.name||''))===key(query)) || rows.find((a)=>key(String(a.name||'')).includes(key(query)) || key(query).includes(key(String(a.name||''))));
+  const target=rows.find((a:Record<string,any>)=>key(String(a.name||''))===key(query)) || rows.find((a:Record<string,any>)=>key(String(a.name||'')).includes(key(query)) || key(query).includes(key(String(a.name||''))));
   if(!target)throw new Error('Исполнитель Deezer не найден');
   const related=await readJson(`https://api.deezer.com/artist/${target.id}/related?limit=6`);
   const similar=(Array.isArray(related.data)?related.data:[]).map(obj).filter((a:Record<string,any>)=>/^\d+$/.test(String(a.id||''))&&typeof a.name==='string').slice(0,6);
