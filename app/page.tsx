@@ -454,10 +454,10 @@ export default function HomePage() {
       }
       if (playback.current.started && currentRef.current?.id !== track.id) recordSwitch();
       // Если у трека кривой/длинный video_id (например > 3:30) или он из каталога — проверяем чистый студийный оригинал в Deezer
-      if (track.video_id && !track.storage_path && track.artist && track.title && (!(track.duration) || track.duration > 210)) {
+      if (track.video_id && !track.storage_path && track.artist && track.title) {
         try {
           const q = encodeURIComponent(`${track.artist} ${track.title}`);
-          const res = await fetch(`/api/catalog/search?source=deezer&q=${q}`);
+          const res = await fetch(`/api/catalog/alternative/search?source=deezer&q=${q}`);
           if (res.ok) {
             const data = await res.json();
             const list = Array.isArray(data?.tracks) ? data.tracks : [];
@@ -568,7 +568,7 @@ export default function HomePage() {
     if (!failed) { say('noticeEmbedFallback'); void skip(1, true); return; }
     try {
       const q = encodeURIComponent(`${failed.artist || ''} ${failed.title}`.trim());
-      const res = await fetch(`/api/catalog/search?source=deezer&q=${q}`);
+      const res = await fetch(`/api/catalog/alternative/search?source=deezer&q=${q}`);
       if (res.ok) {
         const data = await res.json();
         const list = Array.isArray(data?.tracks) ? data.tracks : [];
