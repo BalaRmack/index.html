@@ -453,6 +453,35 @@ export default function HomePage() {
         if (audio.current!.paused) { if (ctx.current && !track.video_id) await ctx.current.resume(); await audio.current!.play(); playback.current.started = true; setPlaying(true); } else { audio.current!.pause(); setPlaying(false); } return;
       }
       if (playback.current.started && currentRef.current?.id !== track.id) recordSwitch();
+      // Если в библиотеке сохранён слишком длинный/чужой ролик (например > 3:30 для короткого трека), подтягиваем точный оригинал по артисту и названию
+      if (track.video_id && track.artist && track.title && (track.duration || 0) > 210) {
+        try {
+          const q = encodeURIComponent(`${track.artist} - ${track.title}`);
+          const res = await fetch(`/api/catalog/search?q=${q}`);
+          if (res.ok) {
+            const data = await res.json();
+            const list = Array.isArray(data?.tracks) ? data.tracks : [];
+            const aLow = track.artist.toLowerCase();
+            const tLow = track.title.toLowerCase();
+            const exact = list.find((c: Track) =>
+              c.video_id &&
+              c.video_id !== track.video_id &&
+              (c.duration || 0) > 45 &&
+              (c.duration || 0) < 210 &&
+              c.title.toLowerCase().includes(tLow) &&
+              (c.artist.toLowerCase().includes(aLow) || c.title.toLowerCase().includes(aLow)) &&
+              !/(remix|nightcore|slowed|sped|cover|mashup)/i.test(c.title)
+            );
+            if (exact?.video_id) {
+              track = { ...track, video_id: exact.video_id, duration: exact.duration || track.duration, thumbnail: exact.thumbnail || track.thumbnail };
+              setTracks((prev) => prev.map((x) => (x.id === track.id ? track : x)));
+              if (user && supabase) {
+                void supabase.from('tracks').update({ video_id: track.video_id, duration: track.duration, artwork: track.thumbnail || null }).eq('id', track.id).eq('owner_id', user.id);
+              }
+            }
+          }
+        } catch {}
+      }
       seq = ++requestSeq.current; if (!track.video_id) { embed.cancel(); yt.current?.stop(); } audio.current?.pause(); setSoundcloudUrl(null);
       if (list && list.length) { waveMode.current = false; setQueue(list, Math.max(0, list.findIndex((x) => x.id === track.id))); }
       if (track.video_id && !playedIds.current.includes(track.video_id)) playedIds.current.push(track.video_id);
