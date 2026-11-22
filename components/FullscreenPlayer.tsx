@@ -157,20 +157,23 @@ export default function FullscreenPlayer({ player, onClose, mood, onMood }: {
                 <BlockButton label={t('block')} reduced={player.reduced} size={20} onBlock={() => player.onBlock(current)} />
               </>
             )}
-            <span className="fp-moods" role="group" aria-label={t('waveMoodLabel')}>
+            <LayoutGroup id="fp-left-moods"><span className="fp-moods" role="group" aria-label={t('waveMoodLabel')}>
               {([['energetic', t('waveMoodEnergetic')], ['calm', t('waveMoodCalm')], ['unknown', t('waveMoodUnknown')], ['loved', t('waveMoodLoved')]] as const).map(([id, label]) => (
-                <button key={id} className={mood === id ? 'on' : undefined} onClick={() => onMood(id)}>{label}</button>
+                <button key={id} className={mood === id ? 'on' : undefined} onClick={() => onMood(id)}>
+                  {mood === id && <motion.span layoutId="fp-left-mood-pill" className="fp-tab-pill" transition={{ type: 'spring', stiffness: 380, damping: 30 }} />}
+                  <span className="fp-tab-label">{label}</span>
+                </button>
               ))}
-            </span>
+            </span></LayoutGroup>
           </div>
           <p className="fp-hint">{t('waveMoodHint')}</p>
         </section>
 
         <section className="fp-right">
           <LayoutGroup id="fp-right-tabs"><div className="fp-tabs" role="tablist">
-            <button role="tab" aria-selected={tab === 'lyrics'} className={tab === 'lyrics' ? 'on' : undefined} onClick={() => setTab('lyrics')}>{tab === 'lyrics' && <motion.span layoutId="fp-tab-pill" className="fp-tab-pill" transition={{ type: 'spring', stiffness: 380, damping: 30 }} />}<ListMusic size={14} /> {t('lyrics')}</button>
-            <button role="tab" aria-selected={tab === 'wave'} className={tab === 'wave' ? 'on' : undefined} onClick={() => setTab('wave')}>{t('waveMoodLabel')}</button>
-          </div>
+            <button role="tab" aria-selected={tab === 'lyrics'} className={tab === 'lyrics' ? 'on' : undefined} onClick={() => setTab('lyrics')}>{tab === 'lyrics' && <motion.span layoutId="fp-tab-pill" className="fp-tab-pill" transition={{ type: 'spring', stiffness: 380, damping: 30 }} />}<span className="fp-tab-label"><ListMusic size={14} /> {t('lyrics')}</span></button>
+            <button role="tab" aria-selected={tab === 'wave'} className={tab === 'wave' ? 'on' : undefined} onClick={() => setTab('wave')}>{tab === 'wave' && <motion.span layoutId="fp-tab-pill" className="fp-tab-pill" transition={{ type: 'spring', stiffness: 380, damping: 30 }} />}<span className="fp-tab-label">{t('waveMoodLabel')}</span></button>
+          </div></LayoutGroup>
           {tab === 'lyrics' ? (
             <div className="fp-lyrics" ref={scroller}>
               {loading && <p className="panel-muted">{t('lyricsLoading')}</p>}
