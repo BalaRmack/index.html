@@ -688,3 +688,15 @@ html[data-glass="full"] .volume-slider:active::-moz-range-thumb {
 }
 .glass-range-wrap:active .glass-thumb{transform:translate(-50%, -50%) scale(1.12)}
 @media(max-width:760px){.glass-range-wrap.volume-wrap{width:56px}}
+
+/* Exact center alignment of track fill inside 28px Liquid Glass capsule */
+.progress input::-webkit-slider-runnable-track,
+.volume-slider::-webkit-slider-runnable-track {
+  background: linear-gradient(
+    90deg,
+    var(--green, #b7e49a) 0%,
+    var(--green, #b7e49a) calc(14px + (100% - 28px) * var(--p, 0)),
+    rgba(255, 255, 255, .16) calc(14px + (100% - 28px) * var(--p, 0)),
+    rgba(255, 255, 255, .16) 100%
+  ) !important;
+}
