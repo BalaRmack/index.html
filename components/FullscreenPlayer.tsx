@@ -96,12 +96,41 @@ export default function FullscreenPlayer({ player, onClose, mood, onMood, origin
       role="dialog"
       aria-modal="true"
       aria-label={t('playingNow')}
-      initial={player.reduced ? { opacity: 0 } : { opacity: 0, scale: 0.04, borderRadius: '28px' }}
-      animate={{ opacity: 1, scale: 1, borderRadius: '0px' }}
-      exit={player.reduced ? { opacity: 0 } : { opacity: 0, scale: 0.04, borderRadius: '28px' }}
-      transition={player.reduced ? { duration: 0 } : { type: 'spring', stiffness: 310, damping: 31, mass: 0.85 }}
-      style={{ transformOrigin: origin ? `${origin.x}px ${origin.y}px` : '82% 94%', overflow: 'hidden', ['--fp-base' as string]: base, ['--fp-glow' as string]: palette?.glow ?? base, ['--fp-deep' as string]: palette?.deep ?? base } as React.CSSProperties}
+      initial={player.reduced ? { opacity: 0 } : {
+        left: origin ? origin.x - 18 : 'calc(82vw - 18px)',
+        top: origin ? origin.y - 18 : 'calc(94vh - 18px)',
+        width: 36,
+        height: 36,
+        borderRadius: 10,
+        opacity: 1,
+      }}
+      animate={{
+        left: 0,
+        top: 0,
+        width: '100vw',
+        height: '100vh',
+        borderRadius: 0,
+        opacity: 1,
+      }}
+      exit={player.reduced ? { opacity: 0 } : {
+        left: origin ? origin.x - 18 : 'calc(82vw - 18px)',
+        top: origin ? origin.y - 18 : 'calc(94vh - 18px)',
+        width: 36,
+        height: 36,
+        borderRadius: 10,
+        opacity: 0,
+        transition: { duration: 0.28, ease: [0.4, 0, 0.2, 1] },
+      }}
+      transition={player.reduced ? { duration: 0 } : { type: 'spring', stiffness: 280, damping: 30, mass: 0.9 }}
+      style={{ position: 'fixed', inset: 'auto', overflow: 'hidden', backgroundColor: '#111814', ['--fp-base' as string]: base, ['--fp-glow' as string]: palette?.glow ?? base, ['--fp-deep' as string]: palette?.deep ?? base } as React.CSSProperties}
     >
+      <motion.div
+        aria-hidden="true"
+        initial={player.reduced ? { opacity: 0 } : { opacity: 1 }}
+        animate={{ opacity: 0 }}
+        transition={{ duration: 0.34, delay: 0.08, ease: 'easeOut' }}
+        style={{ position: 'absolute', inset: 0, background: base, zIndex: 20, pointerEvents: 'none' }}
+      />
       <div className="fp-backdrop" aria-hidden="true">
         <motion.span
           className="fp-blob fp-blob-a"
