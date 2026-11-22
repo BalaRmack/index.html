@@ -1,3 +1,4 @@
+import { LayoutGroup } from 'framer-motion';
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -873,11 +874,16 @@ export default function HomePage() {
                       <motion.button className="primary wave-button" whileTap={reducedMotion ? undefined : { scale: 0.96 }} onClick={() => void startWave()} disabled={waveLoading}><Play size={15} fill="currentColor" /> {waveLoading ? t('noticePreparingWave') : t('myWave')}</motion.button>
                       <button className="hero-link" onClick={() => setView('library')}>{t('openLibrary')} <ArrowRight size={16} /></button>
                     </div>
-                    <div className="hero-moods" role="group" aria-label={t('waveMoodLabel')}>
-                      {([['energetic', t('waveMoodEnergetic')], ['calm', t('waveMoodCalm')], ['unknown', t('waveMoodUnknown')], ['loved', t('waveMoodLoved')]] as const).map(([id, label]) => (
-                        <motion.button key={id} type="button" className={prefs.waveMood === id ? 'on' : undefined} whileTap={reducedMotion ? undefined : { scale: 0.94 }} onClick={() => setPref('waveMood', id)}>{label}</motion.button>
-                      ))}
-                    </div>
+                    <LayoutGroup id="hero-moods-group">
+                      <div className="hero-moods" role="group" aria-label={t('waveMoodLabel')}>
+                        {([['energetic', t('waveMoodEnergetic')], ['calm', t('waveMoodCalm')], ['unknown', t('waveMoodUnknown')], ['loved', t('waveMoodLoved')]] as const).map(([id, label]) => (
+                          <button key={id} type="button" className={prefs.waveMood === id ? 'on' : undefined} onClick={() => setPref('waveMood', id)}>
+                            {prefs.waveMood === id && <motion.span layoutId="hero-mood-pill" className="fp-tab-pill" transition={{ type: 'spring', stiffness: 380, damping: 30 }} />}
+                            <span className="fp-tab-label">{label}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </LayoutGroup>
                   </div>
                 </section>
                 <div className="recommendations">
