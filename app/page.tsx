@@ -734,7 +734,7 @@ export default function HomePage() {
   function skipOnboarding() { setPrefs((prev) => ({ ...prev, onboardingCompleted: true })); setWizard(false); say('onboardingSkipped'); }
 
   const artistLabel = (name: string) => (name === 'Unknown artist' || name === 'Неизвестный исполнитель' ? t('unknownArtist') : name === 'Your upload' || name === 'Ваша загрузка' ? t('yourUpload') : name);
-  const localVisible = tracks.filter((x) => (view === 'liked' ? likes.includes(x.id) : view.startsWith('playlist:') ? playlistIds.includes(x.id) : true) && `${x.title} ${x.artist}`.toLowerCase().includes(search.toLowerCase()));
+  const localVisible = tracks.filter((x) => (view === 'liked' ? likes.includes(x.id) : view.startsWith('playlist:') ? playlistIds.includes(x.id) : (likes.includes(x.id) || Boolean(x.storage_path))) && `${x.title} ${x.artist}`.toLowerCase().includes(search.toLowerCase()));
   const visible = search.trim().length >= 2 ? unique([...localVisible, ...results]) : localVisible;
   const isHome = view === 'home' && !search;
   const shelfItems = (items: Track[]) => items.filter((x) => !isBlocked(x, blocks));
