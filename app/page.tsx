@@ -77,7 +77,8 @@ export default function HomePage() {
   const [loading, setLoading] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [volume, setVolume] = useState(() => { try { const v = Number(localStorage.getItem('nocturne.volume.v1')); return Number.isFinite(v) && v >= 0 && v <= 100 ? v : 70; } catch { return 70; } });
+  const [volume, setVolume] = useState(70);
+  useEffect(() => { try { const raw = localStorage.getItem('nocturne.volume.v1'); if (raw !== null) { const v = Number(raw); if (Number.isFinite(v) && v >= 0 && v <= 100) { setVolume(v); setMuted(v === 0); } } } catch {} }, []);
   const [muted, setMuted] = useState(false);
   const [shuffle, setShuffle] = useState(false);
   const [repeat, setRepeat] = useState(false);
