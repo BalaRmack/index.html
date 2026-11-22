@@ -454,7 +454,7 @@ export default function HomePage() {
       }
       if (playback.current.started && currentRef.current?.id !== track.id) recordSwitch();
       // Если у трека кривой/длинный video_id (например > 3:30) или он из каталога — проверяем чистый студийный оригинал в Deezer
-      if (track.video_id && track.artist && track.title && (track.duration || 0) > 210) {
+      if (track.video_id && !track.storage_path && track.artist && track.title && (!(track.duration) || track.duration > 210)) {
         try {
           const q = encodeURIComponent(`${track.artist} ${track.title}`);
           const res = await fetch(`/api/catalog/search?source=deezer&q=${q}`);
@@ -464,12 +464,13 @@ export default function HomePage() {
             const aLow = track.artist.toLowerCase();
             const tLow = track.title.toLowerCase();
             const dz = list.find((c: Track) =>
-              c.external_id &&
+              (c.external_id || c.id?.startsWith('dz:')) &&
               c.title.toLowerCase().includes(tLow) &&
               c.artist.toLowerCase().includes(aLow)
             );
-            if (dz?.external_id) {
-              track = { ...track, video_id: null, source: 'deezer', external_id: dz.external_id, duration: dz.duration || 30, thumbnail: dz.thumbnail || track.thumbnail };
+            const dzId = dz?.external_id || (dz?.id?.startsWith('dz:') ? dz.id.slice(3) : null);
+            if (dzId) {
+              track = { ...track, video_id: null, source: 'deezer', external_id: dzId, duration: dz.duration || 30, thumbnail: dz.thumbnail || track.thumbnail };
             }
           }
         } catch {}
