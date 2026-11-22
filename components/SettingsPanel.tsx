@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { LayoutGroup, motion } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { Moon, RotateCcw, Trash2, X } from 'lucide-react';
 import type { PlayerBindings } from '@/lib/types';
 import type { Preferences } from '@/lib/preferences';
@@ -29,8 +29,8 @@ function Segmented<T extends string | number>({ t, value, options, onChange, lab
             whileTap={{ scale: 0.96 }}
             transition={{ duration: 0.2 }}
           >
-            {option.value === value && <motion.span layoutId={`seg-${label}`} className="segmented-bg" style={{ position: 'absolute', inset: 0, zIndex: 1, borderRadius: '999px' }} transition={spring} />}
-            <span style={{ position: 'relative', zIndex: 2 }}>{option.label}</span>
+            {option.value === value && <motion.span layoutId={`seg-${label}`} className="segmented-bg" transition={spring} />}
+            <span>{option.label}</span>
           </motion.button>
         ))}
       </div>
@@ -95,7 +95,7 @@ export default function SettingsPanel({ player, prefs, setPref, blocks, onUnbloc
         <button className="panel-close" aria-label={t('closePanel')} onClick={onClose}><X size={17} /></button>
       </header>
 
-      <LayoutGroup id="settings-modal-tabs"><div className="settings-tabs" role="tablist">
+      <div className="settings-tabs" role="tablist">
         {([['appearance', t('settingsAppearance')], ['playback', t('settingsPlayback')], ['reco', t('settingsRecommendations')], ['profile', t('settingsProfile')]] as const).map(([id, label]) => (
           <button key={id} role="tab" aria-selected={section === id} className={section === id ? 'on' : undefined} onClick={() => setSection(id)}>{label}</button>
         ))}
@@ -165,7 +165,8 @@ export default function SettingsPanel({ player, prefs, setPref, blocks, onUnbloc
               options={[{ value: 0, label: t('crossfadeOff') }, { value: 3, label: t('seconds', { value: 3 }) }, { value: 6, label: t('seconds', { value: 6 }) }, { value: 12, label: t('seconds', { value: 12 }) }]}
               onChange={(value) => setPref('crossfade', Number(value))}
             />
-            </>
+            <p className="settings-note">{t('normalizeHint')}</p>
+          </>
         )}
 
         {section === 'reco' && (
